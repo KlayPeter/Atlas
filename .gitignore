@@ -1,0 +1,24 @@
+.DS_Store
+docs/
+
+# Flutter
+apps/atlas_app/.dart_tool/
+apps/atlas_app/.flutter-plugins
+apps/atlas_app/.flutter-plugins-dependencies
+apps/atlas_app/build/
+apps/atlas_app/coverage/
+
+# Bun / Node
+services/atlas_bff/node_modules/
+services/atlas_bff/.env
+services/atlas_bff/.env.*
+!services/atlas_bff/.env.example
+
+# Logs
+*.log
+
+# IDE
+.agent/
+.idea/
+.vscode/
+*.iml
