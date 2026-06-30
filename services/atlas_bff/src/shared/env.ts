@@ -7,6 +7,7 @@ const envSchema = z
       .default('development'),
     PORT: z.coerce.number().int().positive().default(8787),
     OPENAI_API_KEY: z.string().optional(),
+    OPENAI_MODEL: z.string().default('gpt-4.1-mini'),
     DATABASE_URL: z.string().optional(),
     REDIS_URL: z.string().optional(),
   })

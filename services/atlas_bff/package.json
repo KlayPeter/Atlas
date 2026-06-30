@@ -11,6 +11,7 @@
   },
   "dependencies": {
     "hono": "^4.10.7",
+    "openai": "^6.45.0",
     "zod": "^4.2.1"
   },
   "devDependencies": {

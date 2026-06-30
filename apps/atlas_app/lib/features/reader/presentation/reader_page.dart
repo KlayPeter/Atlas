@@ -1,62 +1,453 @@
+import 'dart:async';
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
+import 'package:flutter_markdown_plus/flutter_markdown_plus.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:share_plus/share_plus.dart';
 
 import '../../../app/routing/app_routes.dart';
 import '../../../app/theme/app_theme.dart';
+import '../../../domain/document/document_content.dart';
+import '../../../domain/document/document_summary.dart';
+import '../../ai/presentation/ai_panel.dart';
+import '../../documents/application/document_content_provider.dart';
+import '../../documents/data/document_repository.dart';
+import '../../html_export/application/html_export_service.dart';
+import '../application/reading_settings_controller.dart';
 
-class ReaderPage extends StatelessWidget {
+class ReaderPage extends ConsumerStatefulWidget {
   const ReaderPage({super.key, required this.documentId});
 
   final String? documentId;
 
   @override
+  ConsumerState<ReaderPage> createState() => _ReaderPageState();
+}
+
+class _ReaderPageState extends ConsumerState<ReaderPage> {
+  final _scrollController = ScrollController();
+  Timer? _progressDebounce;
+
+  @override
+  void initState() {
+    super.initState();
+    _restoreOffset();
+    _scrollController.addListener(_scheduleProgressSave);
+  }
+
+  @override
+  void dispose() {
+    _progressDebounce?.cancel();
+    _saveProgress();
+    _scrollController.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
-    if (documentId == null || documentId!.isEmpty) {
+    final documentId = widget.documentId;
+    if (documentId == null || documentId.isEmpty) {
       return const _MissingDocumentPage();
     }
 
+    final document = ref.watch(documentContentProvider(documentId));
+    final settings = ref.watch(readingSettingsProvider);
+
+    return document.when(
+      loading: () =>
+          const Scaffold(body: Center(child: CircularProgressIndicator())),
+      error: (error, _) => _ReaderError(error: error),
+      data: (content) {
+        if (content == null) {
+          return const _MissingDocumentPage();
+        }
+        final readingSettings =
+            settings.asData?.value ?? const ReadingSettings();
+        return _ReaderScaffold(
+          document: content,
+          scrollController: _scrollController,
+          settings: readingSettings,
+          onShowToc: () => _showToc(content),
+          onSearch: () => _showSearch(content),
+          onAi: () => _showAi(content),
+          onSettings: () => _showSettings(readingSettings),
+          onHtml: () =>
+              context.go(AppRoutes.htmlPreviewPath(content.summary.id)),
+          onShareHtml: () => _shareHtml(content),
+        );
+      },
+    );
+  }
+
+  Future<void> _restoreOffset() async {
+    final id = widget.documentId;
+    if (id == null) {
+      return;
+    }
+    final offset = await ref
+        .read(documentRepositoryProvider)
+        .getSavedOffset(id);
+    if (!mounted || offset <= 0) {
+      return;
+    }
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (_scrollController.hasClients) {
+        _scrollController.jumpTo(
+          offset.clamp(0, _scrollController.position.maxScrollExtent),
+        );
+      }
+    });
+  }
+
+  void _scheduleProgressSave() {
+    _progressDebounce?.cancel();
+    _progressDebounce = Timer(const Duration(milliseconds: 500), _saveProgress);
+  }
+
+  Future<void> _saveProgress() async {
+    final id = widget.documentId;
+    if (id == null || !_scrollController.hasClients) {
+      return;
+    }
+    final max = _scrollController.position.maxScrollExtent;
+    final offset = _scrollController.offset
+        .clamp(0, math.max(0, max))
+        .toDouble();
+    final progress = max <= 0 ? 0.0 : offset / max;
+    await ref
+        .read(documentRepositoryProvider)
+        .saveProgress(id, offset, progress);
+  }
+
+  Future<void> _showToc(DocumentContent document) {
+    return showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      builder: (context) => SafeArea(
+        child: ListView(
+          shrinkWrap: true,
+          children: [
+            Padding(
+              padding: const EdgeInsets.all(AtlasSpacing.md),
+              child: Text('目录', style: Theme.of(context).textTheme.titleMedium),
+            ),
+            if (document.sections.isEmpty)
+              const ListTile(title: Text('这份文档没有标题'))
+            else
+              for (final section in document.sections)
+                ListTile(
+                  contentPadding: EdgeInsets.only(
+                    left: AtlasSpacing.md + (section.level - 1) * 16,
+                    right: AtlasSpacing.md,
+                  ),
+                  title: Text(section.title),
+                  subtitle: section.preview.isEmpty
+                      ? null
+                      : Text(section.preview),
+                  onTap: () {
+                    Navigator.of(context).pop();
+                    _jumpToSection(document, section);
+                  },
+                ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _jumpToSection(DocumentContent document, DocumentSection section) {
+    if (!_scrollController.hasClients || document.rawText.isEmpty) {
+      return;
+    }
+    final ratio = section.startOffset / document.rawText.length;
+    _scrollController.animateTo(
+      _scrollController.position.maxScrollExtent * ratio,
+      duration: const Duration(milliseconds: 280),
+      curve: Curves.easeOut,
+    );
+  }
+
+  Future<void> _showSearch(DocumentContent document) async {
+    final queryController = TextEditingController();
+    await showDialog<void>(
+      context: context,
+      builder: (context) {
+        var results = <int>[];
+        return StatefulBuilder(
+          builder: (context, setState) => AlertDialog(
+            title: const Text('文档内搜索'),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextField(
+                  controller: queryController,
+                  autofocus: true,
+                  decoration: const InputDecoration(hintText: '关键词'),
+                  onChanged: (value) {
+                    setState(() {
+                      results = _findMatches(document.rawText, value);
+                    });
+                  },
+                ),
+                const SizedBox(height: AtlasSpacing.sm),
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: Text('找到 ${results.length} 处'),
+                ),
+              ],
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(context).pop(),
+                child: const Text('关闭'),
+              ),
+              FilledButton(
+                onPressed: results.isEmpty
+                    ? null
+                    : () {
+                        Navigator.of(context).pop();
+                        final ratio = results.first / document.rawText.length;
+                        _scrollController.animateTo(
+                          _scrollController.position.maxScrollExtent * ratio,
+                          duration: const Duration(milliseconds: 280),
+                          curve: Curves.easeOut,
+                        );
+                      },
+                child: const Text('跳转首个'),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+    queryController.dispose();
+  }
+
+  List<int> _findMatches(String source, String query) {
+    if (query.trim().isEmpty) {
+      return const [];
+    }
+    return RegExp(
+      RegExp.escape(query),
+      caseSensitive: false,
+    ).allMatches(source).map((match) => match.start).toList(growable: false);
+  }
+
+  Future<void> _showAi(DocumentContent document) {
+    return showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      showDragHandle: true,
+      builder: (context) => AiPanel(document: document),
+    );
+  }
+
+  Future<void> _showSettings(ReadingSettings settings) {
+    return showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      builder: (context) => _ReadingSettingsSheet(settings: settings),
+    );
+  }
+
+  Future<void> _shareHtml(DocumentContent document) async {
+    final messenger = ScaffoldMessenger.of(context);
+    final file = await ref.read(htmlExportServiceProvider).writeHtml(document);
+    await SharePlus.instance.share(
+      ShareParams(files: [XFile(file.path)], subject: document.summary.title),
+    );
+    messenger.showSnackBar(const SnackBar(content: Text('HTML 已生成')));
+  }
+}
+
+class _ReaderScaffold extends StatelessWidget {
+  const _ReaderScaffold({
+    required this.document,
+    required this.scrollController,
+    required this.settings,
+    required this.onShowToc,
+    required this.onSearch,
+    required this.onAi,
+    required this.onSettings,
+    required this.onHtml,
+    required this.onShareHtml,
+  });
+
+  final DocumentContent document;
+  final ScrollController scrollController;
+  final ReadingSettings settings;
+  final VoidCallback onShowToc;
+  final VoidCallback onSearch;
+  final VoidCallback onAi;
+  final VoidCallback onSettings;
+  final VoidCallback onHtml;
+  final VoidCallback onShareHtml;
+
+  @override
+  Widget build(BuildContext context) {
+    final background = settings.eyeCare
+        ? const Color(0xFFF4F0E4)
+        : Theme.of(context).colorScheme.surface;
+
     return Scaffold(
+      backgroundColor: background,
       appBar: AppBar(
-        title: Text('文档 $documentId'),
+        title: Text(document.summary.title, overflow: TextOverflow.ellipsis),
         actions: [
           IconButton(
+            tooltip: '目录',
+            onPressed: onShowToc,
+            icon: const Icon(Icons.format_list_bulleted),
+          ),
+          IconButton(
             tooltip: '搜索',
-            onPressed: () {},
+            onPressed: onSearch,
             icon: const Icon(Icons.search),
           ),
           IconButton(
             tooltip: 'AI',
-            onPressed: () {},
+            onPressed: onAi,
             icon: const Icon(Icons.auto_awesome_outlined),
           ),
-          IconButton(
-            tooltip: '阅读设置',
-            onPressed: () {},
-            icon: const Icon(Icons.text_fields),
+          PopupMenuButton<String>(
+            tooltip: '更多',
+            onSelected: (value) {
+              switch (value) {
+                case 'settings':
+                  onSettings();
+                case 'html':
+                  onHtml();
+                case 'share':
+                  onShareHtml();
+              }
+            },
+            itemBuilder: (context) => const [
+              PopupMenuItem(value: 'settings', child: Text('阅读设置')),
+              PopupMenuItem(value: 'html', child: Text('预览 HTML')),
+              PopupMenuItem(value: 'share', child: Text('分享 HTML')),
+            ],
           ),
         ],
       ),
       body: ListView(
-        padding: const EdgeInsets.fromLTRB(
-          AtlasSpacing.lg,
+        controller: scrollController,
+        padding: EdgeInsets.fromLTRB(
+          settings.pagePadding,
           AtlasSpacing.md,
-          AtlasSpacing.lg,
+          settings.pagePadding,
           AtlasSpacing.xl,
         ),
         children: [
-          Text('阅读器骨架', style: Theme.of(context).textTheme.headlineSmall),
-          const SizedBox(height: AtlasSpacing.md),
-          const Text(
-            '这里会承载 Markdown / TXT 渲染、目录、搜索、阅读进度、选区解释和 AI 面板。'
-            '当前页面只放置阶段 A 的导航和布局锚点。',
-          ),
-          const SizedBox(height: AtlasSpacing.lg),
-          OutlinedButton.icon(
-            onPressed: () => context.go(AppRoutes.htmlPreviewPath('draft')),
-            icon: const Icon(Icons.web_asset_outlined),
-            label: const Text('预览 HTML 导出骨架'),
-          ),
+          if (document.summary.kind == DocumentKind.markdown)
+            MarkdownBody(
+              data: document.rawText,
+              selectable: true,
+              styleSheet: MarkdownStyleSheet.fromTheme(Theme.of(context))
+                  .copyWith(
+                    p: settings.bodyStyle(context),
+                    listBullet: settings.bodyStyle(context),
+                    blockquote: settings.bodyStyle(context),
+                    codeblockDecoration: BoxDecoration(
+                      color: Theme.of(
+                        context,
+                      ).colorScheme.surfaceContainerHighest,
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                  ),
+            )
+          else
+            ...document.paragraphs.map(
+              (paragraph) => Padding(
+                padding: const EdgeInsets.only(bottom: AtlasSpacing.md),
+                child: SelectableText(
+                  paragraph,
+                  style: settings.bodyStyle(context),
+                ),
+              ),
+            ),
         ],
+      ),
+    );
+  }
+}
+
+class _ReadingSettingsSheet extends ConsumerWidget {
+  const _ReadingSettingsSheet({required this.settings});
+
+  final ReadingSettings settings;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    return SafeArea(
+      child: Padding(
+        padding: const EdgeInsets.all(AtlasSpacing.md),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('阅读设置', style: Theme.of(context).textTheme.titleMedium),
+            const SizedBox(height: AtlasSpacing.md),
+            Text('字号 ${settings.fontSize.round()}'),
+            Slider(
+              value: settings.fontSize,
+              min: 14,
+              max: 24,
+              divisions: 10,
+              onChanged: (value) => ref
+                  .read(readingSettingsProvider.notifier)
+                  .updateSettings(settings.copyWith(fontSize: value)),
+            ),
+            Text('行距 ${settings.lineHeight.toStringAsFixed(2)}'),
+            Slider(
+              value: settings.lineHeight,
+              min: 1.25,
+              max: 2.1,
+              divisions: 17,
+              onChanged: (value) => ref
+                  .read(readingSettingsProvider.notifier)
+                  .updateSettings(settings.copyWith(lineHeight: value)),
+            ),
+            Text('页边距 ${settings.pagePadding.round()}'),
+            Slider(
+              value: settings.pagePadding,
+              min: 12,
+              max: 36,
+              divisions: 12,
+              onChanged: (value) => ref
+                  .read(readingSettingsProvider.notifier)
+                  .updateSettings(settings.copyWith(pagePadding: value)),
+            ),
+            SwitchListTile(
+              contentPadding: EdgeInsets.zero,
+              title: const Text('护眼纸色'),
+              value: settings.eyeCare,
+              onChanged: (value) => ref
+                  .read(readingSettingsProvider.notifier)
+                  .updateSettings(settings.copyWith(eyeCare: value)),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _ReaderError extends StatelessWidget {
+  const _ReaderError({required this.error});
+
+  final Object error;
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: const Text('阅读器')),
+      body: Center(
+        child: Padding(
+          padding: const EdgeInsets.all(AtlasSpacing.lg),
+          child: Text('读取文档失败：$error', textAlign: TextAlign.center),
+        ),
       ),
     );
   }
@@ -77,7 +468,7 @@ class _MissingDocumentPage extends StatelessWidget {
             children: [
               const Icon(Icons.description_outlined, size: 48),
               const SizedBox(height: AtlasSpacing.md),
-              const Text('缺少文档 ID'),
+              const Text('找不到这份文档'),
               const SizedBox(height: AtlasSpacing.md),
               FilledButton(
                 onPressed: () => context.go(AppRoutes.library),

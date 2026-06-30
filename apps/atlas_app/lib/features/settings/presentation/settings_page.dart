@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../app/theme/app_theme.dart';
+import '../../reader/application/reading_settings_controller.dart';
 
 class SettingsPage extends ConsumerWidget {
   const SettingsPage({super.key});
@@ -9,6 +10,7 @@ class SettingsPage extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final themeMode = ref.watch(themeModeProvider);
+    final readingSettings = ref.watch(readingSettingsProvider);
 
     return Scaffold(
       appBar: AppBar(title: const Text('设置')),
@@ -41,6 +43,46 @@ class SettingsPage extends ConsumerWidget {
                   .read(themeModeProvider.notifier)
                   .setThemeMode(selection.first);
             },
+          ),
+          const SizedBox(height: AtlasSpacing.lg),
+          Text('阅读排版', style: Theme.of(context).textTheme.titleSmall),
+          const SizedBox(height: AtlasSpacing.sm),
+          readingSettings.when(
+            loading: () => const LinearProgressIndicator(),
+            error: (error, _) => Text('读取设置失败：$error'),
+            data: (settings) => Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('字号 ${settings.fontSize.round()}'),
+                Slider(
+                  value: settings.fontSize,
+                  min: 14,
+                  max: 24,
+                  divisions: 10,
+                  onChanged: (value) => ref
+                      .read(readingSettingsProvider.notifier)
+                      .updateSettings(settings.copyWith(fontSize: value)),
+                ),
+                Text('行距 ${settings.lineHeight.toStringAsFixed(2)}'),
+                Slider(
+                  value: settings.lineHeight,
+                  min: 1.25,
+                  max: 2.1,
+                  divisions: 17,
+                  onChanged: (value) => ref
+                      .read(readingSettingsProvider.notifier)
+                      .updateSettings(settings.copyWith(lineHeight: value)),
+                ),
+                SwitchListTile(
+                  contentPadding: EdgeInsets.zero,
+                  title: const Text('护眼纸色'),
+                  value: settings.eyeCare,
+                  onChanged: (value) => ref
+                      .read(readingSettingsProvider.notifier)
+                      .updateSettings(settings.copyWith(eyeCare: value)),
+                ),
+              ],
+            ),
           ),
         ],
       ),
