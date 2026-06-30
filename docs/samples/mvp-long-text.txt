@@ -1,0 +1,9 @@
+Atlas TXT sample
+
+This file is intentionally plain text. It should be split into readable paragraphs rather than displayed as one dense wall. The reader needs comfortable font size, line height, page padding, search, and progress restore.
+
+Long TXT materials may be meeting notes, interview transcripts, study notes, copied articles, or book excerpts. Atlas should preserve the original text while adding a calmer reading layout.
+
+This paragraph is deliberately long. A mobile reader should avoid making long plain text feel breathless. When paragraphs are too long, the parser can split them into smaller chunks for display while keeping the imported source intact. The goal is not to rewrite the text. The goal is to make it possible to keep reading on a small screen without losing context, position, or visual rhythm. Search should still work across the source, and AI summary should still understand the document as a whole.
+
+End of sample.

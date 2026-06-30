@@ -5,6 +5,7 @@ import '../../../app/theme/app_theme.dart';
 import '../../../domain/document/document_content.dart';
 import '../application/ai_models.dart';
 import '../data/ai_api_client.dart';
+import '../data/ai_history_repository.dart';
 
 class AiPanel extends ConsumerStatefulWidget {
   const AiPanel({super.key, required this.document});
@@ -19,8 +20,15 @@ class _AiPanelState extends ConsumerState<AiPanel> {
   final _selectionController = TextEditingController();
   final _questionController = TextEditingController();
   AiResult? _result;
+  List<AiHistoryEntry> _history = const [];
   Object? _error;
   var _loading = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadHistory();
+  }
 
   @override
   void dispose() {
@@ -102,6 +110,23 @@ class _AiPanelState extends ConsumerState<AiPanel> {
                 style: TextStyle(color: Theme.of(context).colorScheme.error),
               ),
             if (_result != null) _AiResultView(result: _result!),
+            if (_history.isNotEmpty) ...[
+              const SizedBox(height: AtlasSpacing.md),
+              Text('历史', style: Theme.of(context).textTheme.titleSmall),
+              const SizedBox(height: AtlasSpacing.sm),
+              ..._history.map(
+                (entry) => ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  title: Text(entry.result.title),
+                  subtitle: Text(
+                    entry.prompt,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  onTap: () => setState(() => _result = entry.result),
+                ),
+              ),
+            ],
           ],
         ),
       ),
@@ -111,14 +136,42 @@ class _AiPanelState extends ConsumerState<AiPanel> {
   AiDocumentContext get _context =>
       AiDocumentContext.fromDocument(widget.document);
 
-  Future<void> _run(Future<AiResult> Function() action) async {
+  Future<void> _loadHistory() async {
+    final history = await ref
+        .read(aiHistoryRepositoryProvider)
+        .listForDocument(widget.document.summary.id);
+    if (mounted) {
+      setState(() => _history = history);
+    }
+  }
+
+  Future<void> _run({
+    required AiHistoryKind kind,
+    required String prompt,
+    required Future<AiResult> Function() action,
+  }) async {
     setState(() {
       _loading = true;
       _error = null;
     });
     try {
-      final result = await action();
+      final historyRepository = ref.read(aiHistoryRepositoryProvider);
+      final cached = await historyRepository.findCached(
+        documentId: widget.document.summary.id,
+        kind: kind,
+        prompt: prompt,
+      );
+      final result = cached?.result ?? await action();
+      if (cached == null) {
+        await historyRepository.save(
+          documentId: widget.document.summary.id,
+          kind: kind,
+          prompt: prompt,
+          result: result,
+        );
+      }
       setState(() => _result = result);
+      await _loadHistory();
     } catch (error) {
       setState(() => _error = error);
     } finally {
@@ -133,30 +186,64 @@ class _AiPanelState extends ConsumerState<AiPanel> {
     if (selectedText.isEmpty) {
       _selectionController.text = widget.document.paragraphs.firstOrNull ?? '';
     }
+    final prompt = _selectionController.text.trim();
     return _run(
-      () => ref
+      kind: AiHistoryKind.explanation,
+      prompt: prompt,
+      action: () => ref
           .read(aiApiClientProvider)
-          .explain(
-            context: _context,
-            selectedText: _selectionController.text.trim(),
-          ),
+          .explain(context: _context, selectedText: prompt),
     );
   }
 
   Future<void> _summarize() {
-    return _run(() => ref.read(aiApiClientProvider).summarize(_context));
+    return _run(
+      kind: AiHistoryKind.summary,
+      prompt: '全文总结',
+      action: () => ref.read(aiApiClientProvider).summarize(_context),
+    );
   }
 
-  Future<void> _ask() {
+  Future<void> _ask() async {
     final question = _questionController.text.trim();
     if (question.isEmpty) {
-      return Future.value();
+      return;
     }
-    return _run(
-      () => ref
-          .read(aiApiClientProvider)
-          .ask(context: _context, question: question),
-    );
+    setState(() {
+      _loading = true;
+      _error = null;
+      _result = const AiResult(title: '问答', body: '');
+    });
+    final buffer = StringBuffer();
+    try {
+      await for (final chunk
+          in ref
+              .read(aiApiClientProvider)
+              .askStream(context: _context, question: question)) {
+        buffer.write(chunk);
+        if (mounted) {
+          setState(
+            () => _result = AiResult(title: '问答', body: buffer.toString()),
+          );
+        }
+      }
+      final result = AiResult(title: '问答', body: buffer.toString());
+      await ref
+          .read(aiHistoryRepositoryProvider)
+          .save(
+            documentId: widget.document.summary.id,
+            kind: AiHistoryKind.question,
+            prompt: question,
+            result: result,
+          );
+      await _loadHistory();
+    } catch (error) {
+      setState(() => _error = error);
+    } finally {
+      if (mounted) {
+        setState(() => _loading = false);
+      }
+    }
   }
 }
 

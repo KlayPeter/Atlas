@@ -255,9 +255,9 @@ class _ReaderPageState extends ConsumerState<ReaderPage> {
   Future<void> _shareHtml(DocumentContent document) async {
     final messenger = ScaffoldMessenger.of(context);
     final file = await ref.read(htmlExportServiceProvider).writeHtml(document);
-    await SharePlus.instance.share(
-      ShareParams(files: [XFile(file.path)], subject: document.summary.title),
-    );
+    await Share.shareXFiles([
+      XFile(file.path),
+    ], subject: document.summary.title);
     messenger.showSnackBar(const SnackBar(content: Text('HTML 已生成')));
   }
 }

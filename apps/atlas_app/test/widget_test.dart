@@ -3,11 +3,16 @@ import 'package:atlas_app/features/settings/presentation/settings_page.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:receive_sharing_intent/receive_sharing_intent.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
   setUp(() {
     SharedPreferences.setMockInitialValues({});
+    ReceiveSharingIntent.setMockValues(
+      initialMedia: const [],
+      mediaStream: const Stream.empty(),
+    );
   });
 
   testWidgets('Atlas opens to the recent reading shell', (tester) async {

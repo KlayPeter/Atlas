@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -70,6 +72,48 @@ class AiApiClient {
       body: data['answer'] as String? ?? '',
       points: (data['references'] as List?)?.cast<String>() ?? const [],
     );
+  }
+
+  Stream<String> askStream({
+    required AiDocumentContext context,
+    required String question,
+  }) async* {
+    final token = await _deviceToken();
+    final response = await _dio.post<ResponseBody>(
+      '/v1/ai/ask',
+      data: {'question': question, 'context': context.toJson(), 'stream': true},
+      options: Options(
+        headers: {
+          'Authorization': 'Bearer $token',
+          'Accept': 'text/event-stream',
+        },
+        responseType: ResponseType.stream,
+      ),
+    );
+
+    final stream = response.data?.stream;
+    if (stream == null) {
+      throw Exception('AI 流式响应为空');
+    }
+
+    var eventName = '';
+    await for (final line
+        in stream
+            .cast<List<int>>()
+            .transform(utf8.decoder)
+            .transform(const LineSplitter())) {
+      if (line.startsWith('event:')) {
+        eventName = line.substring(6).trim();
+      }
+      if (line.startsWith('data:')) {
+        final payload = jsonDecode(line.substring(5).trim());
+        if (eventName == 'chunk') {
+          yield payload['text'] as String? ?? '';
+        } else if (eventName == 'error') {
+          throw Exception(payload['message'] ?? 'AI 流式响应失败');
+        }
+      }
+    }
   }
 
   Future<Map<String, Object?>> _post(

@@ -37,9 +37,7 @@ class _HtmlPreviewPageState extends ConsumerState<HtmlPreviewPage> {
             tooltip: '分享 HTML',
             onPressed: _filePath == null
                 ? null
-                : () => SharePlus.instance.share(
-                    ShareParams(files: [XFile(_filePath!)]),
-                  ),
+                : () => Share.shareXFiles([XFile(_filePath!)]),
             icon: const Icon(Icons.ios_share),
           ),
         ],
