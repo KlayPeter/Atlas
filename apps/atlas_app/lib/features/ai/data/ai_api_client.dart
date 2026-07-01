@@ -4,6 +4,7 @@ import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../../../domain/ai/study_models.dart';
 import '../application/ai_models.dart';
 
 final aiApiClientProvider = Provider<AiApiClient>((ref) {
@@ -114,6 +115,30 @@ class AiApiClient {
         }
       }
     }
+  }
+
+  Future<StudyResult> generateStudyQuestions({
+    required AiDocumentContext context,
+    String difficulty = 'basic',
+  }) async {
+    final response = await _post('/v1/ai/study/questions', {
+      'context': context.toJson(),
+      'difficulty': difficulty,
+    });
+    final data = response['data'] as Map<String, dynamic>;
+    return StudyResult.fromJson(data);
+  }
+
+  Future<HtmlEnhanceResult> enhanceHtml({
+    required AiDocumentContext context,
+    String mode = 'summary',
+  }) async {
+    final response = await _post('/v1/exports/html/enhance', {
+      'context': context.toJson(),
+      'mode': mode,
+    });
+    final data = response['data'] as Map<String, dynamic>;
+    return HtmlEnhanceResult.fromJson(data);
   }
 
   Future<Map<String, Object?>> _post(

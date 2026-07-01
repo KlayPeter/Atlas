@@ -11,6 +11,9 @@ import '../../../app/routing/app_routes.dart';
 import '../../../app/theme/app_theme.dart';
 import '../../../domain/document/document_content.dart';
 import '../../../domain/document/document_summary.dart';
+import '../../../domain/ai/study_models.dart';
+import '../../ai/application/ai_models.dart';
+import '../../ai/data/ai_api_client.dart';
 import '../../ai/presentation/ai_panel.dart';
 import '../../documents/application/document_content_provider.dart';
 import '../../documents/data/document_repository.dart';
@@ -253,12 +256,50 @@ class _ReaderPageState extends ConsumerState<ReaderPage> {
   }
 
   Future<void> _shareHtml(DocumentContent document) async {
+    final wantEnhance = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('生成 HTML'),
+        content: const Text('是否在 HTML 中包含 AI 生成的导读、摘要和思考题？这可能需要几秒钟。'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('仅导出原文'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('AI 强化导出'),
+          ),
+        ],
+      ),
+    );
+
+    if (wantEnhance == null || !mounted) return;
+
     final messenger = ScaffoldMessenger.of(context);
-    final file = await ref.read(htmlExportServiceProvider).writeHtml(document);
-    await Share.shareXFiles([
-      XFile(file.path),
-    ], subject: document.summary.title);
-    messenger.showSnackBar(const SnackBar(content: Text('HTML 已生成')));
+    messenger.showSnackBar(const SnackBar(content: Text('正在生成 HTML...')));
+
+    try {
+      HtmlEnhanceResult? enhance;
+      if (wantEnhance) {
+        final aiClient = ref.read(aiApiClientProvider);
+        enhance = await aiClient.enhanceHtml(
+          context: AiDocumentContext.fromDocument(document),
+        );
+      }
+
+      final file = await ref
+          .read(htmlExportServiceProvider)
+          .writeHtml(document, enhance: enhance);
+          
+      if (!mounted) return;
+      await Share.shareXFiles([
+        XFile(file.path),
+      ], subject: document.summary.title);
+    } catch (e) {
+      if (!mounted) return;
+      messenger.showSnackBar(SnackBar(content: Text('导出失败: $e')));
+    }
   }
 }
 

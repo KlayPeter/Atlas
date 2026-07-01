@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:markdown/markdown.dart' as markdown;
 import 'package:path_provider/path_provider.dart';
 
+import '../../../domain/ai/study_models.dart';
 import '../../../domain/document/document_content.dart';
 import '../../../domain/document/document_summary.dart';
 
@@ -15,7 +16,7 @@ final htmlExportServiceProvider = Provider<HtmlExportService>((ref) {
 class HtmlExportService {
   const HtmlExportService();
 
-  String buildHtml(DocumentContent document) {
+  String buildHtml(DocumentContent document, {HtmlEnhanceResult? enhance}) {
     final body = document.summary.kind == DocumentKind.markdown
         ? markdown.markdownToHtml(
             document.rawText,
@@ -31,13 +32,35 @@ class HtmlExportService {
         )
         .join('\n');
 
+    final title = enhance?.title ?? document.summary.title;
+
+    var enhanceHtmlStr = '';
+    if (enhance != null) {
+      enhanceHtmlStr = '''
+      <div class="ai-enhance">
+        <h2>AI 导读</h2>
+        <p><strong>${htmlEscape.convert(enhance.lead)}</strong></p>
+        <p>${htmlEscape.convert(enhance.summary)}</p>
+        ${enhance.sections.map((s) => '<h3>${htmlEscape.convert(s.title)}</h3><p>${htmlEscape.convert(s.content)}</p>').join('')}
+        <h3>核心概念</h3>
+        <ul>
+          ${enhance.keyConcepts.map((k) => '<li><strong>${htmlEscape.convert(k.term)}:</strong> ${htmlEscape.convert(k.definition)}</li>').join('')}
+        </ul>
+        <h3>思考题</h3>
+        <ul>
+          ${enhance.questions.map((q) => '<li><strong>Q:</strong> ${htmlEscape.convert(q.q)}<br><strong>A:</strong> ${htmlEscape.convert(q.a)}</li>').join('')}
+        </ul>
+      </div>
+      ''';
+    }
+
     return '''
 <!doctype html>
 <html lang="zh-CN">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>${htmlEscape.convert(document.summary.title)}</title>
+  <title>${htmlEscape.convert(title)}</title>
   <style>
     :root { color-scheme: light dark; }
     body {
@@ -69,7 +92,8 @@ class HtmlExportService {
 </head>
 <body>
   <main>
-    <h1>${htmlEscape.convert(document.summary.title)}</h1>
+    <h1>${htmlEscape.convert(title)}</h1>
+    $enhanceHtmlStr
     ${toc.isEmpty ? '' : '<nav class="toc"><strong>目录</strong><ol>$toc</ol></nav>'}
     <article>$body</article>
   </main>
@@ -78,18 +102,18 @@ class HtmlExportService {
 ''';
   }
 
-  Future<File> writeHtml(DocumentContent document) async {
+  Future<File> writeHtml(DocumentContent document, {HtmlEnhanceResult? enhance}) async {
     final dir = await getApplicationDocumentsDirectory();
     final exportsDir = Directory('${dir.path}/exports');
     if (!await exportsDir.exists()) {
       await exportsDir.create(recursive: true);
     }
-    final safeTitle = document.summary.title
+    final safeTitle = (enhance?.title ?? document.summary.title)
         .replaceAll(RegExp(r'[^\w\u4e00-\u9fff.-]+'), '-')
         .replaceAll(RegExp(r'-+'), '-');
     final file = File(
       '${exportsDir.path}/${document.summary.id}-$safeTitle.html',
     );
-    return file.writeAsString(buildHtml(document), flush: true);
+    return file.writeAsString(buildHtml(document, enhance: enhance), flush: true);
   }
 }

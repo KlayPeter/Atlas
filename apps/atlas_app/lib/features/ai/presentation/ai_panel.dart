@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
+import '../../../app/routing/app_routes.dart';
 import '../../../app/theme/app_theme.dart';
 import '../../../domain/document/document_content.dart';
 import '../application/ai_models.dart';
@@ -73,7 +75,7 @@ class _AiPanelState extends ConsumerState<AiPanel> {
               ),
             ),
             const SizedBox(height: AtlasSpacing.sm),
-            Wrap(
+              Wrap(
               spacing: AtlasSpacing.sm,
               runSpacing: AtlasSpacing.sm,
               children: [
@@ -86,6 +88,19 @@ class _AiPanelState extends ConsumerState<AiPanel> {
                   onPressed: _loading ? null : _summarize,
                   icon: const Icon(Icons.summarize_outlined),
                   label: const Text('总结全文'),
+                ),
+                OutlinedButton.icon(
+                  onPressed: _loading
+                      ? null
+                      : () {
+                          Navigator.of(context).pop();
+                          context.push(
+                            AppRoutes.studyPath(widget.document.summary.id),
+                            extra: widget.document,
+                          );
+                        },
+                  icon: const Icon(Icons.school_outlined),
+                  label: const Text('进入学习模式'),
                 ),
               ],
             ),

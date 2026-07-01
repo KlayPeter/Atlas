@@ -9,6 +9,7 @@ import {
   askRequestSchema,
   explainRequestSchema,
   summarizeRequestSchema,
+  studyRequestSchema,
 } from '../modules/ai/contracts';
 import { AppError } from '../shared/app_error';
 import { successResponse } from '../shared/http';
@@ -45,6 +46,12 @@ export function registerAiRoutes(app: Hono) {
         data: JSON.stringify({ references: result.references }),
       });
     });
+  });
+
+  app.post('/v1/ai/study/questions', requireDeviceToken(), aiGuard(), async (context) => {
+    const request = studyRequestSchema.parse(await context.req.json());
+    const result = await provider.generateStudyQuestions(request);
+    return context.json(successResponse(result));
   });
 }
 

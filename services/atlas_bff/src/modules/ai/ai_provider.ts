@@ -25,6 +25,8 @@ export interface AiProvider {
   explain(request: ExplainRequest): Promise<ExplainResult>;
   summarize(request: SummarizeRequest): Promise<SummaryResult>;
   ask(request: AskRequest): Promise<AskResult>;
+  generateStudyQuestions(request: any): Promise<any>;
+  enhanceHtml(request: any): Promise<any>;
 }
 
 export function createAiProvider(): AiProvider {
@@ -60,6 +62,37 @@ class MockAiProvider implements AiProvider {
     return {
       answer: `问题“${request.question}”已收到。开发 mock 会基于《${request.context.title}》返回占位答案；配置模型后将按文档上下文回答。`,
       references: ['当前文档片段', '当前文档大纲'],
+    };
+  }
+
+  async generateStudyQuestions(request: any): Promise<any> {
+    return {
+      difficulty: request.difficulty,
+      questions: [
+        {
+          question: `什么是《${request.context.title}》的核心概念？`,
+          referenceAnswer: `根据开发 mock，这仅仅是一个占位回答，需要在配置 OPENAI_API_KEY 后才能生效。`,
+        },
+        {
+          question: `请简述大纲中提到的关键步骤。`,
+          referenceAnswer: `请结合实际文档内容进行作答。`,
+        },
+      ],
+    };
+  }
+
+  async enhanceHtml(request: any): Promise<any> {
+    return {
+      title: request.context.title,
+      lead: 'HTML enhance mock 导读内容',
+      summary: '这是一段用于开发联调的 mock 摘要。',
+      sections: [],
+      keyConcepts: [
+        { term: 'Mock', definition: '测试环境占位数据' }
+      ],
+      questions: [
+        { q: '什么是 Mock？', a: '测试环境占位数据' }
+      ],
     };
   }
 }
@@ -100,12 +133,52 @@ class OpenAiProvider implements AiProvider {
     };
   }
 
+  async generateStudyQuestions(request: any): Promise<any> {
+    const promptStr = require('./prompts').studyPrompt(request);
+    const jsonStr = await this.completeJson(promptStr);
+    try {
+      const parsed = JSON.parse(jsonStr);
+      return {
+        difficulty: request.difficulty,
+        questions: parsed.questions ?? [],
+      };
+    } catch (e) {
+      return { difficulty: request.difficulty, questions: [] };
+    }
+  }
+
+  async enhanceHtml(request: any): Promise<any> {
+    const promptStr = require('./prompts').htmlEnhancePrompt(request);
+    const jsonStr = await this.completeJson(promptStr);
+    try {
+      return JSON.parse(jsonStr);
+    } catch (e) {
+      return {
+        title: request.context.title,
+        lead: '',
+        summary: '',
+        sections: [],
+        keyConcepts: [],
+        questions: [],
+      };
+    }
+  }
+
   private async complete(prompt: string) {
     const response = await this.client.responses.create({
       model: env.OPENAI_MODEL,
       input: prompt,
     });
     return response.output_text;
+  }
+
+  private async completeJson(prompt: string) {
+    const response = await this.client.chat.completions.create({
+      model: env.OPENAI_MODEL,
+      messages: [{ role: 'user', content: prompt }],
+      response_format: { type: 'json_object' },
+    });
+    return response.choices[0].message.content ?? '{}';
   }
 }
 

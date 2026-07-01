@@ -23,7 +23,19 @@ export const askRequestSchema = z.object({
   stream: z.boolean().default(false),
 });
 
+export const studyRequestSchema = z.object({
+  difficulty: z.enum(['basic', 'advanced', 'challenge']).default('basic'),
+  context: documentContextSchema,
+});
+
+export const htmlEnhanceRequestSchema = z.object({
+  mode: z.enum(['summary', 'study']).default('summary'),
+  context: documentContextSchema,
+});
+
 export type DocumentContext = z.infer<typeof documentContextSchema>;
 export type ExplainRequest = z.infer<typeof explainRequestSchema>;
 export type SummarizeRequest = z.infer<typeof summarizeRequestSchema>;
 export type AskRequest = z.infer<typeof askRequestSchema>;
+export type StudyRequest = z.infer<typeof studyRequestSchema>;
+export type HtmlEnhanceRequest = z.infer<typeof htmlEnhanceRequestSchema>;
