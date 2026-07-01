@@ -1,7 +1,9 @@
 import 'dart:async';
 import 'dart:io';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:receive_sharing_intent/receive_sharing_intent.dart';
@@ -33,13 +35,24 @@ class ShareImportController {
       return;
     }
     _started = true;
-    _subscription = ReceiveSharingIntent.instance.getMediaStream().listen(
-      _handleSharedMedia,
-      onError: (_) {},
-    );
-    final initialMedia = await ReceiveSharingIntent.instance.getInitialMedia();
-    await _handleSharedMedia(initialMedia);
-    await ReceiveSharingIntent.instance.reset();
+
+    if (!_supportsShareImport) {
+      return;
+    }
+
+    try {
+      _subscription = ReceiveSharingIntent.instance.getMediaStream().listen(
+        _handleSharedMedia,
+        onError: (_) {},
+      );
+      final initialMedia = await ReceiveSharingIntent.instance
+          .getInitialMedia();
+      await _handleSharedMedia(initialMedia);
+      await ReceiveSharingIntent.instance.reset();
+    } on MissingPluginException {
+      await _subscription?.cancel();
+      _subscription = null;
+    }
   }
 
   Future<void> _handleSharedMedia(List<SharedMediaFile> files) async {
@@ -73,5 +86,13 @@ class ShareImportController {
 
   Future<void> dispose() async {
     await _subscription?.cancel();
+  }
+
+  bool get _supportsShareImport {
+    if (kIsWeb) {
+      return false;
+    }
+    return defaultTargetPlatform == TargetPlatform.android ||
+        defaultTargetPlatform == TargetPlatform.iOS;
   }
 }

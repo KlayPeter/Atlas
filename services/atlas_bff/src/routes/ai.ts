@@ -2,6 +2,7 @@ import type { Hono } from 'hono';
 import { streamSSE } from 'hono/streaming';
 import { ZodError } from 'zod';
 
+import { aiGuard } from '../middleware/ai_guard';
 import { requireDeviceToken } from '../middleware/auth';
 import { createAiProvider } from '../modules/ai/ai_provider';
 import {
@@ -15,19 +16,19 @@ import { successResponse } from '../shared/http';
 export function registerAiRoutes(app: Hono) {
   const provider = createAiProvider();
 
-  app.post('/v1/ai/explain', requireDeviceToken(), async (context) => {
+  app.post('/v1/ai/explain', requireDeviceToken(), aiGuard(), async (context) => {
     const request = explainRequestSchema.parse(await context.req.json());
     const result = await provider.explain(request);
     return context.json(successResponse(result));
   });
 
-  app.post('/v1/ai/summarize', requireDeviceToken(), async (context) => {
+  app.post('/v1/ai/summarize', requireDeviceToken(), aiGuard(), async (context) => {
     const request = summarizeRequestSchema.parse(await context.req.json());
     const result = await provider.summarize(request);
     return context.json(successResponse(result));
   });
 
-  app.post('/v1/ai/ask', requireDeviceToken(), async (context) => {
+  app.post('/v1/ai/ask', requireDeviceToken(), aiGuard(), async (context) => {
     const request = askRequestSchema.parse(await context.req.json());
     const result = await provider.ask(request);
     if (!request.stream) {
