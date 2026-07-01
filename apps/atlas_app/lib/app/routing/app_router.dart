@@ -11,6 +11,13 @@ import 'app_routes.dart';
 final appRouterProvider = Provider<GoRouter>((ref) {
   return GoRouter(
     initialLocation: AppRoutes.library,
+    redirect: (context, state) {
+      final uriString = state.uri.toString();
+      if (uriString.startsWith('content://') || uriString.startsWith('file://')) {
+        return AppRoutes.library;
+      }
+      return null;
+    },
     routes: [
       GoRoute(
         path: AppRoutes.library,

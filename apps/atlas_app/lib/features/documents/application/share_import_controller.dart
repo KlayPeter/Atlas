@@ -75,6 +75,10 @@ class ShareImportController {
       return File(item.path);
     }
     if (item.type == SharedMediaType.text || item.type == SharedMediaType.url) {
+      final possibleFile = File(item.path);
+      if (possibleFile.existsSync()) {
+        return possibleFile;
+      }
       final tempDir = await getTemporaryDirectory();
       final file = File(
         '${tempDir.path}/atlas-shared-${DateTime.now().microsecondsSinceEpoch}.txt',
