@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'package:crypto/crypto.dart';
 import 'package:file_picker/file_picker.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -17,12 +18,15 @@ final documentRepositoryProvider = Provider<DocumentRepository>((ref) {
 });
 
 class DocumentRepository {
-  DocumentRepository(this._parser);
+  DocumentRepository(this._parser, {bool usePreferencesForDocuments = false})
+    : _usePreferencesForDocuments = usePreferencesForDocuments;
 
   static const _documentsKey = 'atlas.documents.v1';
   static const _offsetPrefix = 'atlas.readingOffset.';
+  static const _contentPrefix = 'atlas.documentContent.';
 
   final DocumentParser _parser;
+  final bool _usePreferencesForDocuments;
 
   Future<List<DocumentSummary>> listDocuments() async {
     final prefs = await SharedPreferences.getInstance();
@@ -48,12 +52,10 @@ class DocumentRepository {
       return null;
     }
 
-    final file = File(summary.filePath);
-    if (!await file.exists()) {
+    final rawText = await _readDocumentText(summary);
+    if (rawText == null) {
       return null;
     }
-
-    final rawText = await file.readAsString();
     final parsed = _parser.parse(rawText, summary.kind);
     final repairedSummary = summary.wordCount == parsed.wordCount
         ? summary
@@ -71,13 +73,23 @@ class DocumentRepository {
     final result = await FilePicker.platform.pickFiles(
       type: FileType.custom,
       allowedExtensions: const ['md', 'markdown', 'txt'],
-      withData: false,
+      withData: kIsWeb,
     );
-    final path = result?.files.single.path;
-    if (path == null) {
+    final pickedFile = result?.files.single;
+    if (pickedFile == null) {
       throw const DocumentImportCanceled();
     }
-    return importFile(File(path));
+
+    final path = pickedFile.path;
+    if (!kIsWeb && path != null) {
+      return importFile(File(path));
+    }
+
+    final bytes = pickedFile.bytes;
+    if (bytes == null) {
+      throw const DocumentImportFailure('无法读取所选文件内容');
+    }
+    return importBytes(bytes: bytes, originalName: pickedFile.name);
   }
 
   Future<DocumentSummary> importFile(File sourceFile) async {
@@ -91,6 +103,21 @@ class DocumentRepository {
     }
 
     final bytes = await sourceFile.readAsBytes();
+    return importBytes(
+      bytes: bytes,
+      originalName: sourceFile.uri.pathSegments.last,
+    );
+  }
+
+  Future<DocumentSummary> importBytes({
+    required List<int> bytes,
+    required String originalName,
+  }) async {
+    final extension = originalName.split('.').last.toLowerCase();
+    if (!const {'md', 'markdown', 'txt'}.contains(extension)) {
+      throw const DocumentImportFailure('Atlas 目前只支持 Markdown 和 TXT');
+    }
+
     final hash = sha256.convert(bytes).toString();
     final existing = await _findByHash(hash);
     if (existing != null) {
@@ -98,17 +125,14 @@ class DocumentRepository {
       return existing;
     }
 
-    final appDir = await getApplicationDocumentsDirectory();
-    final documentsDir = Directory('${appDir.path}/documents');
-    if (!await documentsDir.exists()) {
-      await documentsDir.create(recursive: true);
-    }
-
     final id = const Uuid().v4();
     final kind = DocumentKindLabel.fromExtension(extension);
-    final safeTitle = sourceFile.uri.pathSegments.last;
-    final storedPath = '${documentsDir.path}/$id.${kind.extension}';
-    await File(storedPath).writeAsBytes(bytes, flush: true);
+    final safeTitle = originalName;
+    final storedPath = await _storeDocumentBytes(
+      id: id,
+      kind: kind,
+      bytes: bytes,
+    );
 
     final rawText = utf8.decode(bytes, allowMalformed: true);
     final parsed = _parser.parse(rawText, kind);
@@ -134,10 +158,7 @@ class DocumentRepository {
     final documents = await listDocuments();
     final target = documents.where((document) => document.id == id).firstOrNull;
     if (target != null) {
-      final file = File(target.filePath);
-      if (await file.exists()) {
-        await file.delete();
-      }
+      await _deleteStoredDocument(target);
     }
     await _saveDocuments(
       documents.where((document) => document.id != id).toList(),
@@ -190,6 +211,63 @@ class DocumentRepository {
         .map((document) => jsonEncode(document.toJson()))
         .toList(growable: false);
     await prefs.setStringList(_documentsKey, payload);
+  }
+
+  Future<String?> _readDocumentText(DocumentSummary summary) async {
+    if (summary.filePath.startsWith('prefs:')) {
+      final prefs = await SharedPreferences.getInstance();
+      return prefs.getString('$_contentPrefix${summary.id}');
+    }
+
+    if (kIsWeb) {
+      return null;
+    }
+
+    final file = File(summary.filePath);
+    if (!await file.exists()) {
+      return null;
+    }
+    return file.readAsString();
+  }
+
+  Future<String> _storeDocumentBytes({
+    required String id,
+    required DocumentKind kind,
+    required List<int> bytes,
+  }) async {
+    final rawText = utf8.decode(bytes, allowMalformed: true);
+
+    if (kIsWeb || _usePreferencesForDocuments) {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString('$_contentPrefix$id', rawText);
+      return 'prefs:$id';
+    }
+
+    final appDir = await getApplicationDocumentsDirectory();
+    final documentsDir = Directory('${appDir.path}/documents');
+    if (!await documentsDir.exists()) {
+      await documentsDir.create(recursive: true);
+    }
+    final storedPath = '${documentsDir.path}/$id.${kind.extension}';
+    await File(storedPath).writeAsBytes(bytes, flush: true);
+    return storedPath;
+  }
+
+  Future<void> _deleteStoredDocument(DocumentSummary document) async {
+    if (document.filePath.startsWith('prefs:')) {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.remove('$_contentPrefix${document.id}');
+      return;
+    }
+
+    if (kIsWeb) {
+      return;
+    }
+
+    final file = File(document.filePath);
+    if (await file.exists()) {
+      await file.delete();
+    }
   }
 }
 
