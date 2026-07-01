@@ -29,11 +29,18 @@ export interface AiProvider {
   enhanceHtml(request: any): Promise<any>;
 }
 
-export function createAiProvider(): AiProvider {
-  if (!env.OPENAI_API_KEY) {
+export interface AiConfig {
+  apiKey?: string;
+  baseUrl?: string;
+  model?: string;
+}
+
+export function createAiProvider(config?: AiConfig): AiProvider {
+  const apiKey = config?.apiKey || env.OPENAI_API_KEY;
+  if (!apiKey) {
     return new MockAiProvider();
   }
-  return new OpenAiProvider(env.OPENAI_API_KEY);
+  return new OpenAiProvider(apiKey, config?.baseUrl, config?.model);
 }
 
 class MockAiProvider implements AiProvider {
@@ -99,9 +106,14 @@ class MockAiProvider implements AiProvider {
 
 class OpenAiProvider implements AiProvider {
   private readonly client: OpenAI;
+  private readonly model: string;
 
-  constructor(apiKey: string) {
-    this.client = new OpenAI({ apiKey });
+  constructor(apiKey: string, baseUrl?: string, model?: string) {
+    this.client = new OpenAI({ 
+      apiKey,
+      baseURL: baseUrl || undefined,
+    });
+    this.model = model || env.OPENAI_MODEL;
   }
 
   async explain(request: ExplainRequest): Promise<ExplainResult> {
@@ -165,16 +177,16 @@ class OpenAiProvider implements AiProvider {
   }
 
   private async complete(prompt: string) {
-    const response = await this.client.responses.create({
-      model: env.OPENAI_MODEL,
-      input: prompt,
+    const response = await this.client.chat.completions.create({
+      model: this.model,
+      messages: [{ role: 'user', content: prompt }],
     });
-    return response.output_text;
+    return response.choices[0].message.content ?? '';
   }
 
   private async completeJson(prompt: string) {
     const response = await this.client.chat.completions.create({
-      model: env.OPENAI_MODEL,
+      model: this.model,
       messages: [{ role: 'user', content: prompt }],
       response_format: { type: 'json_object' },
     });

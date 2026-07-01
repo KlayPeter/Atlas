@@ -15,23 +15,29 @@ import { AppError } from '../shared/app_error';
 import { successResponse } from '../shared/http';
 
 export function registerAiRoutes(app: Hono) {
-  const provider = createAiProvider();
+  function getProvider(context: any) {
+    return createAiProvider({
+      apiKey: context.req.header('x-ai-provider-api-key'),
+      baseUrl: context.req.header('x-ai-provider-base-url'),
+      model: context.req.header('x-ai-provider-model'),
+    });
+  }
 
   app.post('/v1/ai/explain', requireDeviceToken(), aiGuard(), async (context) => {
     const request = explainRequestSchema.parse(await context.req.json());
-    const result = await provider.explain(request);
+    const result = await getProvider(context).explain(request);
     return context.json(successResponse(result));
   });
 
   app.post('/v1/ai/summarize', requireDeviceToken(), aiGuard(), async (context) => {
     const request = summarizeRequestSchema.parse(await context.req.json());
-    const result = await provider.summarize(request);
+    const result = await getProvider(context).summarize(request);
     return context.json(successResponse(result));
   });
 
   app.post('/v1/ai/ask', requireDeviceToken(), aiGuard(), async (context) => {
     const request = askRequestSchema.parse(await context.req.json());
-    const result = await provider.ask(request);
+    const result = await getProvider(context).ask(request);
     if (!request.stream) {
       return context.json(successResponse(result));
     }
@@ -50,7 +56,7 @@ export function registerAiRoutes(app: Hono) {
 
   app.post('/v1/ai/study/questions', requireDeviceToken(), aiGuard(), async (context) => {
     const request = studyRequestSchema.parse(await context.req.json());
-    const result = await provider.generateStudyQuestions(request);
+    const result = await getProvider(context).generateStudyQuestions(request);
     return context.json(successResponse(result));
   });
 }

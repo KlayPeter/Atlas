@@ -79,13 +79,13 @@ class AiApiClient {
     required AiDocumentContext context,
     required String question,
   }) async* {
-    final token = await _deviceToken();
+    final headers = await _getAiHeaders();
     final response = await _dio.post<ResponseBody>(
       '/v1/ai/ask',
       data: {'question': question, 'context': context.toJson(), 'stream': true},
       options: Options(
         headers: {
-          'Authorization': 'Bearer $token',
+          ...headers,
           'Accept': 'text/event-stream',
         },
         responseType: ResponseType.stream,
@@ -145,17 +145,33 @@ class AiApiClient {
     String path,
     Map<String, Object?> body,
   ) async {
-    final token = await _deviceToken();
+    final headers = await _getAiHeaders();
     final response = await _dio.post<Map<String, Object?>>(
       path,
       data: body,
-      options: Options(headers: {'Authorization': 'Bearer $token'}),
+      options: Options(headers: headers),
     );
     final data = response.data;
     if (data == null || data['ok'] != true) {
       throw Exception('AI 请求失败');
     }
     return data;
+  }
+
+  Future<Map<String, String>> _getAiHeaders() async {
+    final token = await _deviceToken();
+    final prefs = await SharedPreferences.getInstance();
+    
+    final apiKey = prefs.getString('ai_settings_api_key') ?? '';
+    final baseUrl = prefs.getString('ai_settings_base_url') ?? '';
+    final modelName = prefs.getString('ai_settings_model_name') ?? '';
+
+    return {
+      'Authorization': 'Bearer $token',
+      if (apiKey.isNotEmpty) 'x-ai-provider-api-key': apiKey,
+      if (baseUrl.isNotEmpty) 'x-ai-provider-base-url': baseUrl,
+      if (modelName.isNotEmpty) 'x-ai-provider-model': modelName,
+    };
   }
 
   Future<String> _deviceToken() async {
