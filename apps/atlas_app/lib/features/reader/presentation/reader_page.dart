@@ -601,16 +601,28 @@ class _InlineExplanationOverlay extends StatelessWidget {
   }
 }
 
-class _ReadingSettingsSheet extends ConsumerWidget {
+class _ReadingSettingsSheet extends ConsumerStatefulWidget {
   const _ReadingSettingsSheet();
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final settingsAsync = ref.watch(readingSettingsProvider);
-    final settings = settingsAsync.value;
-    if (settings == null) {
+  ConsumerState<_ReadingSettingsSheet> createState() => _ReadingSettingsSheetState();
+}
+
+class _ReadingSettingsSheetState extends ConsumerState<_ReadingSettingsSheet> {
+  ReadingSettings? _localSettings;
+
+  @override
+  void initState() {
+    super.initState();
+    _localSettings = ref.read(readingSettingsProvider).value;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_localSettings == null) {
       return const SizedBox.shrink();
     }
+    final settings = _localSettings!;
 
     return SafeArea(
       child: Padding(
@@ -627,9 +639,12 @@ class _ReadingSettingsSheet extends ConsumerWidget {
               min: 8,
               max: 24,
               divisions: 16,
-              onChanged: (value) => ref
-                  .read(readingSettingsProvider.notifier)
-                  .updateSettings(settings.copyWith(fontSize: value)),
+              onChanged: (value) {
+                setState(() => _localSettings = settings.copyWith(fontSize: value));
+              },
+              onChangeEnd: (value) {
+                ref.read(readingSettingsProvider.notifier).updateSettings(settings.copyWith(fontSize: value));
+              },
             ),
             Text('行距 ${settings.lineHeight.toStringAsFixed(2)}'),
             Slider(
@@ -637,9 +652,12 @@ class _ReadingSettingsSheet extends ConsumerWidget {
               min: 1.25,
               max: 2.1,
               divisions: 17,
-              onChanged: (value) => ref
-                  .read(readingSettingsProvider.notifier)
-                  .updateSettings(settings.copyWith(lineHeight: value)),
+              onChanged: (value) {
+                setState(() => _localSettings = settings.copyWith(lineHeight: value));
+              },
+              onChangeEnd: (value) {
+                ref.read(readingSettingsProvider.notifier).updateSettings(settings.copyWith(lineHeight: value));
+              },
             ),
             Text('页边距 ${settings.pagePadding.round()}'),
             Slider(
@@ -647,17 +665,21 @@ class _ReadingSettingsSheet extends ConsumerWidget {
               min: 12,
               max: 36,
               divisions: 12,
-              onChanged: (value) => ref
-                  .read(readingSettingsProvider.notifier)
-                  .updateSettings(settings.copyWith(pagePadding: value)),
+              onChanged: (value) {
+                setState(() => _localSettings = settings.copyWith(pagePadding: value));
+              },
+              onChangeEnd: (value) {
+                ref.read(readingSettingsProvider.notifier).updateSettings(settings.copyWith(pagePadding: value));
+              },
             ),
             SwitchListTile(
               contentPadding: EdgeInsets.zero,
               title: const Text('护眼纸色'),
               value: settings.eyeCare,
-              onChanged: (value) => ref
-                  .read(readingSettingsProvider.notifier)
-                  .updateSettings(settings.copyWith(eyeCare: value)),
+              onChanged: (value) {
+                setState(() => _localSettings = settings.copyWith(eyeCare: value));
+                ref.read(readingSettingsProvider.notifier).updateSettings(settings.copyWith(eyeCare: value));
+              },
             ),
           ],
         ),
