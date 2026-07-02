@@ -34,7 +34,7 @@ class ReaderMarkdownView extends StatelessWidget {
     final styleSheet = _buildStyleSheet(context, theme);
 
     return SmoothMarkdown(
-      data: data,
+      data: _normalizeMarkdownData(data),
       styleSheet: styleSheet,
       useEnhancedComponents: true,
       selectable: true,
@@ -55,6 +55,13 @@ class ReaderMarkdownView extends StatelessWidget {
           'mermaid',
           _AtlasMermaidBuilder(compact: compact, useJsMermaid: useJsMermaid),
         ),
+    );
+  }
+
+  String _normalizeMarkdownData(String value) {
+    return value.replaceAllMapped(
+      RegExp(r'(^|\n)(`{3,}|~{3,})[ \t]*mermind([ \t]*\n)'),
+      (match) => '${match[1]}${match[2]}mermaid${match[3]}',
     );
   }
 

@@ -9,7 +9,7 @@ void main() {
     'ReaderMarkdownView renders mermaid blocks and scrollable tables',
     (tester) async {
       const markdown = '''
-```mermaid
+```mermind
 sequenceDiagram
   Alice->>Bob: 你好
   Bob-->>Alice: 收到
