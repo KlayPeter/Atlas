@@ -46,12 +46,16 @@ export function createAiProvider(config?: AiConfig): AiProvider {
 class MockAiProvider implements AiProvider {
   async explain(request: ExplainRequest): Promise<ExplainResult> {
     return {
-      title: '基于文档的解释',
-      explanation: `“${request.selectedText}”在《${request.context.title}》中需要结合当前章节理解。开发环境未配置 OPENAI_API_KEY，因此这里返回可联调的本地解释。`,
+      title: request.selectedText,
+      explanation: [
+        `**是什么**：${request.selectedText} 是当前选中的概念或表述。`,
+        `**在本文里**：它需要放回《${request.context.title}》的上下文理解，结合大纲和片段判断它服务于哪个问题。`,
+        '**怎么做**：先定位相关章节，再把它转成可执行的问题、流程或决策点。',
+      ].join('\n\n'),
       points: [
-        '解释请求已包含文档标题、大纲、片段和选中文本。',
-        '后端没有记录原文，只返回统一响应结构。',
-        '配置 OPENAI_API_KEY 后会切换为真实模型调用。',
+        '是什么',
+        '在本文里',
+        '怎么做',
       ],
     };
   }
@@ -119,7 +123,7 @@ class OpenAiProvider implements AiProvider {
   async explain(request: ExplainRequest): Promise<ExplainResult> {
     const text = await this.complete(explainPrompt(request));
     return {
-      title: '基于文档的解释',
+      title: request.selectedText,
       explanation: text,
       points: extractPoints(text),
     };

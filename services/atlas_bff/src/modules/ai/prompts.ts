@@ -2,13 +2,17 @@ import type { AskRequest, ExplainRequest, SummarizeRequest } from './contracts';
 
 export function explainPrompt(request: ExplainRequest) {
   return [
-    '你是 Atlas 的文档阅读助手。只基于当前文档上下文解释用户选中的内容。',
+    '你是 Atlas 的文档阅读助手。解释用户选中的内容时，要同时结合通用 AI 知识和当前文档上下文。',
+    '输出必须简洁，适合放在阅读器选区旁的小浮窗里。',
+    '请用 Markdown 输出，不超过 120 字，结构固定为：',
+    '1. `**是什么**`：先说明这个词/句子本身是什么意思。',
+    '2. `**在本文里**`：结合整篇文章片段说明它在当前语境中的作用。',
+    '3. `**怎么做**`：如果它暗示行动、流程或判断，给出一句可执行建议；没有就省略。',
     '如果文档没有直接说明，请明确区分“文档依据”和“补充背景”。',
     `文档标题：${request.context.title}`,
     `文档大纲：\n${request.context.outline}`,
     `文档片段：\n${request.context.excerpt}`,
     `用户选中：${request.selectedText}`,
-    '请输出简洁中文解释，并列出 2-4 个要点。',
   ].join('\n\n');
 }
 
@@ -59,4 +63,3 @@ export function htmlEnhancePrompt(request: any) {
     `原文档片段：\n${request.context.excerpt}`,
   ].join('\n\n');
 }
-

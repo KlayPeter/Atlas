@@ -6,6 +6,8 @@ import '../../../domain/document/document_content.dart';
 import '../application/ai_models.dart';
 import '../data/ai_api_client.dart';
 import '../data/ai_history_repository.dart';
+import '../../reader/application/reading_settings_controller.dart';
+import '../../reader/presentation/reader_markdown_view.dart';
 
 import 'study_page.dart';
 
@@ -31,7 +33,8 @@ class _AiPanelState extends ConsumerState<AiPanel> {
   void initState() {
     super.initState();
     _loadHistory();
-    if (widget.initialSelection != null && widget.initialSelection!.isNotEmpty) {
+    if (widget.initialSelection != null &&
+        widget.initialSelection!.isNotEmpty) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted) _explain();
       });
@@ -124,12 +127,14 @@ class _AiPanelState extends ConsumerState<AiPanel> {
             if (_error != null)
               Builder(
                 builder: (context) {
-                  final msg = _error.toString().startsWith('Exception: ') 
-                      ? _error.toString().substring(11) 
+                  final msg = _error.toString().startsWith('Exception: ')
+                      ? _error.toString().substring(11)
                       : _error.toString();
                   return Text(
                     'AI 暂时不可用：$msg',
-                    style: TextStyle(color: Theme.of(context).colorScheme.error),
+                    style: TextStyle(
+                      color: Theme.of(context).colorScheme.error,
+                    ),
                   );
                 },
               ),
@@ -208,7 +213,7 @@ class _AiPanelState extends ConsumerState<AiPanel> {
   Future<void> _explain() {
     final prompt = widget.initialSelection?.trim() ?? '';
     if (prompt.isEmpty) return Future.value();
-    
+
     return _run(
       kind: AiHistoryKind.explanation,
       prompt: prompt,
@@ -276,6 +281,14 @@ class _AiResultView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final markdown = [
+      result.body,
+      if (result.points.isNotEmpty) ...[
+        '',
+        ...result.points.map((point) => '- $point'),
+      ],
+    ].join('\n');
+
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(AtlasSpacing.md),
@@ -284,11 +297,11 @@ class _AiResultView extends StatelessWidget {
           children: [
             Text(result.title, style: Theme.of(context).textTheme.titleMedium),
             const SizedBox(height: AtlasSpacing.sm),
-            Text(result.body),
-            if (result.points.isNotEmpty) ...[
-              const SizedBox(height: AtlasSpacing.sm),
-              ...result.points.map((point) => Text('• $point')),
-            ],
+            ReaderMarkdownView(
+              data: markdown,
+              settings: const ReadingSettings(fontSize: 15, lineHeight: 1.5),
+              compact: true,
+            ),
           ],
         ),
       ),

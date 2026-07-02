@@ -32,6 +32,7 @@ class ReaderPage extends ConsumerStatefulWidget {
 class _ReaderPageState extends ConsumerState<ReaderPage> {
   final _scrollController = ScrollController();
   Timer? _progressDebounce;
+  OverlayEntry? _inlineExplanationOverlay;
 
   @override
   void initState() {
@@ -43,6 +44,7 @@ class _ReaderPageState extends ConsumerState<ReaderPage> {
   @override
   void dispose() {
     _progressDebounce?.cancel();
+    _inlineExplanationOverlay?.remove();
     _saveProgress();
     _scrollController.dispose();
     super.dispose();
@@ -75,7 +77,8 @@ class _ReaderPageState extends ConsumerState<ReaderPage> {
           onShowToc: () => _showToc(content),
           onSearch: () => _showSearch(content),
           onAi: () => _showAi(content),
-          onAiExplain: (text) => _showAi(content, initialSelection: text),
+          onAiExplain: (text, anchor) =>
+              _showInlineExplanation(content, text, anchor),
           onSettings: () => _showSettings(readingSettings),
           onHtml: () =>
               context.push(AppRoutes.htmlPreviewPath(content.summary.id)),
@@ -249,6 +252,35 @@ class _ReaderPageState extends ConsumerState<ReaderPage> {
     );
   }
 
+  void _showInlineExplanation(
+    DocumentContent document,
+    String selectedText,
+    Offset anchor,
+  ) {
+    _inlineExplanationOverlay?.remove();
+    final result = ref
+        .read(aiApiClientProvider)
+        .explain(
+          context: AiDocumentContext.fromDocument(document),
+          selectedText: selectedText,
+        );
+
+    _inlineExplanationOverlay = OverlayEntry(
+      builder: (context) => _InlineExplanationOverlay(
+        anchor: anchor,
+        selectedText: selectedText,
+        result: result,
+        onClose: _hideInlineExplanation,
+      ),
+    );
+    Overlay.of(context).insert(_inlineExplanationOverlay!);
+  }
+
+  void _hideInlineExplanation() {
+    _inlineExplanationOverlay?.remove();
+    _inlineExplanationOverlay = null;
+  }
+
   Future<void> _showSettings(ReadingSettings settings) {
     return showModalBottomSheet<void>(
       context: context,
@@ -325,7 +357,7 @@ class _ReaderScaffold extends StatelessWidget {
   final VoidCallback onShowToc;
   final VoidCallback onSearch;
   final VoidCallback onAi;
-  final ValueChanged<String> onAiExplain;
+  final void Function(String text, Offset anchor) onAiExplain;
   final VoidCallback onSettings;
   final VoidCallback onHtml;
   final VoidCallback onShareHtml;
@@ -391,9 +423,11 @@ class _ReaderScaffold extends StatelessWidget {
                 final selectedText = textValue.selection.textInside(
                   textValue.text,
                 );
+                final anchor =
+                    selectableRegionState.contextMenuAnchors.primaryAnchor;
                 selectableRegionState.hideToolbar();
                 if (selectedText.trim().isNotEmpty) {
-                  onAiExplain(selectedText.trim());
+                  onAiExplain(selectedText.trim(), anchor);
                 }
               },
               label: 'AI 解释',
@@ -408,57 +442,36 @@ class _ReaderScaffold extends StatelessWidget {
         child: ListView(
           controller: scrollController,
           padding: EdgeInsets.fromLTRB(
-            settings.pagePadding,
-            AtlasSpacing.md,
-            settings.pagePadding,
+            math.min(settings.pagePadding, AtlasSpacing.md),
+            AtlasSpacing.sm,
+            math.min(settings.pagePadding, AtlasSpacing.md),
             AtlasSpacing.xl,
           ),
           children: [
-            Align(
-              alignment: Alignment.topCenter,
-              child: ConstrainedBox(
-                constraints: const BoxConstraints(maxWidth: 920),
-                child: DecoratedBox(
-                  decoration: BoxDecoration(
-                    color: paperColor,
-                    borderRadius: BorderRadius.circular(28),
-                    border: Border.all(
-                      color: theme.colorScheme.outlineVariant.withValues(
-                        alpha: 0.72,
+            DecoratedBox(
+              decoration: BoxDecoration(color: paperColor),
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(8, 12, 8, 28),
+                child: document.summary.kind == DocumentKind.markdown
+                    ? ReaderMarkdownView(
+                        data: document.rawText,
+                        settings: settings,
+                      )
+                    : Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          for (final paragraph in document.paragraphs)
+                            Padding(
+                              padding: const EdgeInsets.only(
+                                bottom: AtlasSpacing.md,
+                              ),
+                              child: Text(
+                                paragraph,
+                                style: settings.bodyStyle(context),
+                              ),
+                            ),
+                        ],
                       ),
-                    ),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black.withValues(alpha: 0.04),
-                        blurRadius: 26,
-                        offset: const Offset(0, 10),
-                      ),
-                    ],
-                  ),
-                  child: Padding(
-                    padding: const EdgeInsets.fromLTRB(24, 28, 24, 32),
-                    child: document.summary.kind == DocumentKind.markdown
-                        ? ReaderMarkdownView(
-                            data: document.rawText,
-                            settings: settings,
-                          )
-                        : Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              for (final paragraph in document.paragraphs)
-                                Padding(
-                                  padding: const EdgeInsets.only(
-                                    bottom: AtlasSpacing.md,
-                                  ),
-                                  child: Text(
-                                    paragraph,
-                                    style: settings.bodyStyle(context),
-                                  ),
-                                ),
-                            ],
-                          ),
-                  ),
-                ),
               ),
             ),
           ],
@@ -469,6 +482,122 @@ class _ReaderScaffold extends StatelessWidget {
         tooltip: 'AI 助手',
         child: const Icon(Icons.auto_awesome_outlined),
       ),
+    );
+  }
+}
+
+class _InlineExplanationOverlay extends StatelessWidget {
+  const _InlineExplanationOverlay({
+    required this.anchor,
+    required this.selectedText,
+    required this.result,
+    required this.onClose,
+  });
+
+  final Offset anchor;
+  final String selectedText;
+  final Future<AiResult> result;
+  final VoidCallback onClose;
+
+  @override
+  Widget build(BuildContext context) {
+    final size = MediaQuery.sizeOf(context);
+    final width = math.min(380.0, size.width - 24);
+    const height = 260.0;
+    final left = (anchor.dx - width / 2).clamp(12.0, size.width - width - 12);
+    final preferBelow = anchor.dy + height + 16 < size.height;
+    final top = preferBelow
+        ? anchor.dy + 12
+        : (anchor.dy - height - 12).clamp(12.0, size.height - height - 12);
+
+    return Stack(
+      children: [
+        Positioned.fill(
+          child: GestureDetector(
+            behavior: HitTestBehavior.translucent,
+            onTap: onClose,
+            child: const SizedBox.expand(),
+          ),
+        ),
+        Positioned(
+          left: left,
+          top: top,
+          width: width,
+          child: Material(
+            elevation: 14,
+            borderRadius: BorderRadius.circular(10),
+            color: Theme.of(context).colorScheme.surface,
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxHeight: height),
+              child: Padding(
+                padding: const EdgeInsets.all(AtlasSpacing.md),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            selectedText,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: Theme.of(context).textTheme.titleSmall,
+                          ),
+                        ),
+                        IconButton(
+                          tooltip: '关闭',
+                          onPressed: onClose,
+                          icon: const Icon(Icons.close, size: 18),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: AtlasSpacing.xs),
+                    Flexible(
+                      child: FutureBuilder<AiResult>(
+                        future: result,
+                        builder: (context, snapshot) {
+                          if (snapshot.connectionState !=
+                              ConnectionState.done) {
+                            return const Padding(
+                              padding: EdgeInsets.symmetric(
+                                vertical: AtlasSpacing.md,
+                              ),
+                              child: LinearProgressIndicator(),
+                            );
+                          }
+                          if (snapshot.hasError) {
+                            final message = snapshot.error
+                                .toString()
+                                .replaceFirst('Exception: ', '');
+                            return Text(
+                              'AI 暂时不可用：$message',
+                              style: TextStyle(
+                                color: Theme.of(context).colorScheme.error,
+                              ),
+                            );
+                          }
+
+                          return SingleChildScrollView(
+                            child: ReaderMarkdownView(
+                              data: snapshot.requireData.body,
+                              settings: const ReadingSettings(
+                                fontSize: 14,
+                                lineHeight: 1.45,
+                              ),
+                              compact: true,
+                            ),
+                          );
+                        },
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+      ],
     );
   }
 }

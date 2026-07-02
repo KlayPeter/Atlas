@@ -4,15 +4,13 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../app/theme/app_theme.dart';
 import '../../../domain/ai/study_models.dart';
 import '../../../domain/document/document_content.dart';
+import '../../reader/application/reading_settings_controller.dart';
+import '../../reader/presentation/reader_markdown_view.dart';
 import '../application/ai_models.dart';
 import '../data/ai_api_client.dart';
 
 class StudyView extends ConsumerStatefulWidget {
-  const StudyView({
-    super.key,
-    required this.document,
-    required this.onBack,
-  });
+  const StudyView({super.key, required this.document, required this.onBack});
 
   final DocumentContent document;
   final VoidCallback onBack;
@@ -125,10 +123,10 @@ class _StudyViewState extends ConsumerState<StudyView> {
     }
 
     if (_error != null) {
-      final msg = _error.toString().startsWith('Exception: ') 
-          ? _error.toString().substring(11) 
+      final msg = _error.toString().startsWith('Exception: ')
+          ? _error.toString().substring(11)
           : _error.toString();
-          
+
       return Padding(
         padding: const EdgeInsets.all(AtlasSpacing.lg),
         child: Center(
@@ -141,10 +139,7 @@ class _StudyViewState extends ConsumerState<StudyView> {
                 style: TextStyle(color: Theme.of(context).colorScheme.error),
               ),
               const SizedBox(height: AtlasSpacing.md),
-              FilledButton(
-                onPressed: _loadQuestions,
-                child: const Text('重试'),
-              ),
+              FilledButton(onPressed: _loadQuestions, child: const Text('重试')),
             ],
           ),
         ),
@@ -192,14 +187,19 @@ class _StudyViewState extends ConsumerState<StudyView> {
                     ),
                     const SizedBox(height: AtlasSpacing.md),
                     if (_showAnswer)
-                      Text(
-                        question.referenceAnswer,
-                        textAlign: TextAlign.center,
-                        style: Theme.of(context).textTheme.bodyMedium,
+                      ReaderMarkdownView(
+                        data: question.referenceAnswer,
+                        settings: const ReadingSettings(
+                          fontSize: 15,
+                          lineHeight: 1.5,
+                        ),
+                        compact: true,
                       )
                     else
-                      const Text('点击卡片查看答案',
-                          style: TextStyle(color: Colors.grey)),
+                      const Text(
+                        '点击卡片查看答案',
+                        style: TextStyle(color: Colors.grey),
+                      ),
                   ],
                 ),
               ),

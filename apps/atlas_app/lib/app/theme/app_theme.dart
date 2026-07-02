@@ -44,25 +44,25 @@ class AtlasTheme {
       headlineLarge: GoogleFonts.notoSerifSc(
         textStyle: base.textTheme.headlineLarge?.copyWith(
           fontWeight: FontWeight.w700,
-          letterSpacing: -0.5,
+          letterSpacing: 0,
         ),
       ),
       headlineMedium: GoogleFonts.notoSerifSc(
         textStyle: base.textTheme.headlineMedium?.copyWith(
           fontWeight: FontWeight.w700,
-          letterSpacing: -0.4,
+          letterSpacing: 0,
         ),
       ),
       headlineSmall: GoogleFonts.notoSerifSc(
         textStyle: base.textTheme.headlineSmall?.copyWith(
           fontWeight: FontWeight.w700,
-          letterSpacing: -0.35,
+          letterSpacing: 0,
         ),
       ),
       titleLarge: GoogleFonts.notoSerifSc(
         textStyle: base.textTheme.titleLarge?.copyWith(
           fontWeight: FontWeight.w700,
-          letterSpacing: -0.2,
+          letterSpacing: 0,
         ),
       ),
     );

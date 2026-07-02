@@ -2,6 +2,7 @@ import { describe, expect, test } from 'bun:test';
 
 import { createApp } from './app';
 import { resetAiGuardForTests } from './middleware/ai_guard';
+import { explainPrompt } from './modules/ai/prompts';
 
 describe('atlas bff', () => {
   const explainBody = {
@@ -61,6 +62,17 @@ describe('atlas bff', () => {
     expect(response.status).toBe(200);
     expect(body.ok).toBe(true);
     expect(body.data.explanation).toContain('local-first');
+    expect(body.data.explanation).toContain('**是什么**');
+  });
+
+  test('explain prompt stays short-form markdown for inline popovers', () => {
+    const prompt = explainPrompt(explainBody);
+
+    expect(prompt).toContain('Markdown');
+    expect(prompt).toContain('不超过 120 字');
+    expect(prompt).toContain('**是什么**');
+    expect(prompt).toContain('**在本文里**');
+    expect(prompt).toContain('**怎么做**');
   });
 
   test('rejects oversized ai request bodies', async () => {

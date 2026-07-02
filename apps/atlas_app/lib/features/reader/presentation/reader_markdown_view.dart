@@ -11,10 +11,12 @@ class ReaderMarkdownView extends StatelessWidget {
     super.key,
     required this.data,
     required this.settings,
+    this.compact = false,
   });
 
   final String data;
   final ReadingSettings settings;
+  final bool compact;
 
   @override
   Widget build(BuildContext context) {
@@ -27,15 +29,7 @@ class ReaderMarkdownView extends StatelessWidget {
       plugins: ParserPluginRegistry()..register(const MermaidPlugin()),
       builderRegistry: BuilderRegistry()
         ..register('table', const _ReaderTableBuilder())
-        ..register(
-          'mermaid',
-          EnhancedMermaidBuilder(
-            defaultTheme: theme.brightness == Brightness.dark
-                ? MermaidThemeMode.dark
-                : MermaidThemeMode.light,
-            showSourceToggle: true,
-          ),
-        ),
+        ..register('mermaid', _AtlasMermaidBuilder(compact: compact)),
     );
   }
 
@@ -60,17 +54,21 @@ class ReaderMarkdownView extends StatelessWidget {
       textStyle: bodyStyle,
       paragraphStyle: bodyStyle,
       h1Style: headingBase.copyWith(
-        fontSize: math.max(settings.fontSize + 18, 30),
+        fontSize: compact
+            ? math.max(settings.fontSize + 5, 19)
+            : math.max(settings.fontSize + 18, 30),
         fontWeight: FontWeight.w700,
-        letterSpacing: -0.45,
       ),
       h2Style: headingBase.copyWith(
-        fontSize: math.max(settings.fontSize + 12, 25),
+        fontSize: compact
+            ? math.max(settings.fontSize + 3, 17)
+            : math.max(settings.fontSize + 12, 25),
         fontWeight: FontWeight.w700,
-        letterSpacing: -0.3,
       ),
       h3Style: headingBase.copyWith(
-        fontSize: math.max(settings.fontSize + 8, 22),
+        fontSize: compact
+            ? math.max(settings.fontSize + 2, 16)
+            : math.max(settings.fontSize + 8, 22),
         fontWeight: FontWeight.w600,
       ),
       h4Style: GoogleFonts.notoSansSc(
@@ -98,9 +96,7 @@ class ReaderMarkdownView extends StatelessWidget {
         ),
       ),
       blockquoteDecoration: BoxDecoration(
-        color: scheme.surfaceContainerLow.withValues(
-          alpha: settings.eyeCare ? 0.88 : 1,
-        ),
+        color: scheme.surfaceContainerLow.withValues(alpha: 0.82),
         border: Border(
           left: BorderSide(
             color: scheme.primary.withValues(alpha: 0.45),
@@ -143,7 +139,7 @@ class ReaderMarkdownView extends StatelessWidget {
       ),
       codeBlockDecoration: BoxDecoration(
         color: codeBackground,
-        borderRadius: BorderRadius.circular(20),
+        borderRadius: BorderRadius.circular(8),
         border: Border.all(color: scheme.outlineVariant.withValues(alpha: 0.8)),
       ),
       tableBorder: TableBorder.all(
@@ -158,17 +154,98 @@ class ReaderMarkdownView extends StatelessWidget {
       tableEvenRowDecoration: BoxDecoration(
         color: settings.eyeCare ? const Color(0xFFFAF5E8) : scheme.surface,
       ),
-      blockSpacing: 22,
-      listIndent: 28,
+      blockSpacing: compact ? 10 : 20,
+      listIndent: compact ? 18 : 28,
       blockquotePadding: const EdgeInsets.symmetric(
-        horizontal: 18,
-        vertical: 16,
-      ),
-      codeBlockPadding: const EdgeInsets.fromLTRB(18, 20, 18, 18),
-      tableCellPadding: const EdgeInsets.symmetric(
-        horizontal: 16,
+        horizontal: 14,
         vertical: 12,
       ),
+      codeBlockPadding: const EdgeInsets.fromLTRB(14, 16, 14, 14),
+      tableCellPadding: const EdgeInsets.symmetric(
+        horizontal: 12,
+        vertical: 10,
+      ),
+    );
+  }
+}
+
+class _AtlasMermaidBuilder extends MarkdownWidgetBuilder {
+  const _AtlasMermaidBuilder({required this.compact});
+
+  final bool compact;
+
+  @override
+  bool canBuild(MarkdownNode node) => node is MermaidDiagramNode;
+
+  @override
+  Widget build(
+    MarkdownNode node,
+    MarkdownStyleSheet styleSheet,
+    MarkdownRenderContext context,
+  ) {
+    final mermaidNode = node as MermaidDiagramNode;
+
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final isDark = Theme.of(context).brightness == Brightness.dark;
+        final minWidth = compact ? constraints.maxWidth : 980.0;
+        final style = _style(isDark);
+
+        return Container(
+          margin: EdgeInsets.symmetric(vertical: compact ? 8 : 18),
+          decoration: BoxDecoration(
+            color: Color(style.backgroundColor),
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(
+              color: const Color(0xFFA78BFA).withValues(alpha: 0.38),
+            ),
+          ),
+          clipBehavior: Clip.antiAlias,
+          child: SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            padding: const EdgeInsets.all(12),
+            child: ConstrainedBox(
+              constraints: BoxConstraints(
+                minWidth: math.max(constraints.maxWidth, minWidth),
+              ),
+              child: MermaidDiagram(
+                code: mermaidNode.code,
+                style: style,
+                enableResponsive: !compact,
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  MermaidStyle _style(bool isDark) {
+    if (isDark) {
+      return MermaidStyle.dark().copyWith(
+        defaultNodeStyle: const NodeStyle(
+          fillColor: 0xFF28233D,
+          strokeColor: 0xFFA78BFA,
+          textColor: 0xFFF8FAFC,
+        ),
+        defaultEdgeStyle: const EdgeStyle(strokeColor: 0xFFE5E7EB),
+        nodeSpacingX: 88,
+        nodeSpacingY: 64,
+        padding: 28,
+      );
+    }
+
+    return const MermaidStyle(
+      backgroundColor: 0xFFFFFFFF,
+      defaultNodeStyle: NodeStyle(
+        fillColor: 0xFFF3F0FF,
+        strokeColor: 0xFFA78BFA,
+        textColor: 0xFF111827,
+      ),
+      defaultEdgeStyle: EdgeStyle(strokeColor: 0xFF30333A),
+      nodeSpacingX: 88,
+      nodeSpacingY: 64,
+      padding: 28,
     );
   }
 }
@@ -225,7 +302,7 @@ class _ReaderTableBuilder extends MarkdownWidgetBuilder {
 
     return LayoutBuilder(
       builder: (context, constraints) => ClipRRect(
-        borderRadius: BorderRadius.circular(18),
+        borderRadius: BorderRadius.circular(8),
         child: DecoratedBox(
           decoration: BoxDecoration(
             border: Border.all(
@@ -233,7 +310,7 @@ class _ReaderTableBuilder extends MarkdownWidgetBuilder {
                 context,
               ).colorScheme.outlineVariant.withValues(alpha: 0.8),
             ),
-            borderRadius: BorderRadius.circular(18),
+            borderRadius: BorderRadius.circular(8),
           ),
           child: SingleChildScrollView(
             scrollDirection: Axis.horizontal,
