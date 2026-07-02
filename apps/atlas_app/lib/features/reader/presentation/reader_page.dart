@@ -2,7 +2,6 @@ import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
-import 'package:flutter_markdown_plus/flutter_markdown_plus.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:share_plus/share_plus.dart';
@@ -19,6 +18,7 @@ import '../../documents/application/document_content_provider.dart';
 import '../../documents/data/document_repository.dart';
 import '../../html_export/application/html_export_service.dart';
 import '../application/reading_settings_controller.dart';
+import 'reader_markdown_view.dart';
 
 class ReaderPage extends ConsumerStatefulWidget {
   const ReaderPage({super.key, required this.documentId});
@@ -244,7 +244,8 @@ class _ReaderPageState extends ConsumerState<ReaderPage> {
       context: context,
       isScrollControlled: true,
       showDragHandle: true,
-      builder: (context) => AiPanel(document: document, initialSelection: initialSelection),
+      builder: (context) =>
+          AiPanel(document: document, initialSelection: initialSelection),
     );
   }
 
@@ -292,7 +293,7 @@ class _ReaderPageState extends ConsumerState<ReaderPage> {
       final file = await ref
           .read(htmlExportServiceProvider)
           .writeHtml(document, enhance: enhance);
-          
+
       if (!mounted) return;
       await Share.shareXFiles([
         XFile(file.path),
@@ -331,9 +332,13 @@ class _ReaderScaffold extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
     final background = settings.eyeCare
         ? const Color(0xFFF4F0E4)
-        : Theme.of(context).colorScheme.surface;
+        : theme.colorScheme.surface;
+    final paperColor = settings.eyeCare
+        ? const Color(0xFFFFFCF4)
+        : theme.colorScheme.surfaceContainerLowest;
 
     return Scaffold(
       backgroundColor: background,
@@ -373,15 +378,19 @@ class _ReaderScaffold extends StatelessWidget {
       body: SelectionArea(
         contextMenuBuilder: (context, selectableRegionState) {
           final buttonItems = selectableRegionState.contextMenuButtonItems;
-          final copyButton = buttonItems.where((b) => b.type == ContextMenuButtonType.copy).toList();
-          
+          final copyButton = buttonItems
+              .where((b) => b.type == ContextMenuButtonType.copy)
+              .toList();
+
           final customButtonItems = <ContextMenuButtonItem>[
             ...copyButton,
             ContextMenuButtonItem(
               onPressed: () {
                 // ignore: deprecated_member_use
                 final textValue = selectableRegionState.textEditingValue;
-                final selectedText = textValue.selection.textInside(textValue.text);
+                final selectedText = textValue.selection.textInside(
+                  textValue.text,
+                );
                 selectableRegionState.hideToolbar();
                 if (selectedText.trim().isNotEmpty) {
                   onAiExplain(selectedText.trim());
@@ -405,33 +414,53 @@ class _ReaderScaffold extends StatelessWidget {
             AtlasSpacing.xl,
           ),
           children: [
-            if (document.summary.kind == DocumentKind.markdown)
-              MarkdownBody(
-                data: document.rawText,
-                selectable: false,
-                styleSheet: MarkdownStyleSheet.fromTheme(Theme.of(context))
-                    .copyWith(
-                      p: settings.bodyStyle(context),
-                      listBullet: settings.bodyStyle(context),
-                      blockquote: settings.bodyStyle(context),
-                      codeblockDecoration: BoxDecoration(
-                        color: Theme.of(
-                          context,
-                        ).colorScheme.surfaceContainerHighest,
-                        borderRadius: BorderRadius.circular(8),
+            Align(
+              alignment: Alignment.topCenter,
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 920),
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    color: paperColor,
+                    borderRadius: BorderRadius.circular(28),
+                    border: Border.all(
+                      color: theme.colorScheme.outlineVariant.withValues(
+                        alpha: 0.72,
                       ),
                     ),
-              )
-            else
-              ...document.paragraphs.map(
-                (paragraph) => Padding(
-                  padding: const EdgeInsets.only(bottom: AtlasSpacing.md),
-                  child: Text(
-                    paragraph,
-                    style: settings.bodyStyle(context),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withValues(alpha: 0.04),
+                        blurRadius: 26,
+                        offset: const Offset(0, 10),
+                      ),
+                    ],
+                  ),
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(24, 28, 24, 32),
+                    child: document.summary.kind == DocumentKind.markdown
+                        ? ReaderMarkdownView(
+                            data: document.rawText,
+                            settings: settings,
+                          )
+                        : Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              for (final paragraph in document.paragraphs)
+                                Padding(
+                                  padding: const EdgeInsets.only(
+                                    bottom: AtlasSpacing.md,
+                                  ),
+                                  child: Text(
+                                    paragraph,
+                                    style: settings.bodyStyle(context),
+                                  ),
+                                ),
+                            ],
+                          ),
                   ),
                 ),
               ),
+            ),
           ],
         ),
       ),
