@@ -392,10 +392,10 @@ class _ReaderCodeBlock extends StatelessWidget {
     );
   }
 
-  String? _normalizeLanguage(String? value) {
+  String _normalizeLanguage(String? value) {
     final language = value?.trim().toLowerCase();
-    if (language == null || language.isEmpty || language == 'text') {
-      return null;
+    if (language == null || language.isEmpty || language == 'text' || language == 'txt') {
+      return 'plaintext';
     }
 
     final normalized = switch (language) {
@@ -428,7 +428,7 @@ class _ReaderCodeBlock extends StatelessWidget {
       'yaml',
     };
 
-    return supportedLanguages.contains(normalized) ? normalized : null;
+    return supportedLanguages.contains(normalized) ? normalized : 'plaintext';
   }
 }
 
