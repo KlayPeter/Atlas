@@ -48,6 +48,7 @@ dependencies:
   receive_sharing_intent: 1.8.1
   flutter_smooth_markdown: ^0.7.4
   google_fonts: ^8.1.0
+  flutter_highlight: ^0.7.0
 
 dev_dependencies:
   flutter_test:

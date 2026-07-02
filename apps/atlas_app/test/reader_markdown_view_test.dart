@@ -26,6 +26,7 @@ sequenceDiagram
             body: ReaderMarkdownView(
               data: markdown,
               settings: ReadingSettings(),
+              useJsMermaid: false,
             ),
           ),
         ),
@@ -43,4 +44,63 @@ sequenceDiagram
       );
     },
   );
+
+  testWidgets('ReaderMarkdownView keeps markdown text selectable', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: ReaderMarkdownView(
+            data: '这是一段可以选择并解释的正文。',
+            settings: const ReadingSettings(),
+            onAiExplain: (_, _) {},
+            useJsMermaid: false,
+          ),
+        ),
+      ),
+    );
+
+    final markdown = tester.widget<SmoothMarkdown>(find.byType(SmoothMarkdown));
+    expect(markdown.selectable, isTrue);
+    expect(markdown.contextMenuBuilder, isNotNull);
+  });
+
+  testWidgets(
+    'ReaderMarkdownView renders code blocks with a non-overlapping toolbar',
+    (tester) async {
+      const markdown = '''
+```dart
+final expected = count(expected_handled);
+```
+''';
+
+      await tester.pumpWidget(
+        const MaterialApp(
+          home: Scaffold(
+            body: ReaderMarkdownView(
+              data: markdown,
+              settings: ReadingSettings(),
+              useJsMermaid: false,
+            ),
+          ),
+        ),
+      );
+
+      expect(find.text('DART'), findsOneWidget);
+      expect(find.byTooltip('复制代码'), findsOneWidget);
+      expect(
+        find.byWidgetPredicate(
+          (widget) =>
+              widget is RichText &&
+              widget.text.toPlainText().contains('expected_handled'),
+        ),
+        findsOneWidget,
+      );
+    },
+  );
+
+  test('ReadingSettings defaults to a 14 point reading font', () {
+    expect(const ReadingSettings().fontSize, 14);
+  });
 }

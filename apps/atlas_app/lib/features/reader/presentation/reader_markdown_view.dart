@@ -1,8 +1,14 @@
+import 'dart:convert';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:flutter_highlight/flutter_highlight.dart';
+import 'package:flutter_highlight/themes/atom-one-dark.dart' as atom_dark;
+import 'package:flutter_highlight/themes/github.dart' as github;
 import 'package:flutter_smooth_markdown/flutter_smooth_markdown.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:webview_flutter/webview_flutter.dart';
 
 import '../application/reading_settings_controller.dart';
 
@@ -12,24 +18,77 @@ class ReaderMarkdownView extends StatelessWidget {
     required this.data,
     required this.settings,
     this.compact = false,
+    this.onAiExplain,
+    this.useJsMermaid = true,
   });
 
   final String data;
   final ReadingSettings settings;
   final bool compact;
+  final void Function(String text, Offset anchor)? onAiExplain;
+  final bool useJsMermaid;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final styleSheet = _buildStyleSheet(context, theme);
 
     return SmoothMarkdown(
       data: data,
-      styleSheet: _buildStyleSheet(context, theme),
+      styleSheet: styleSheet,
       useEnhancedComponents: true,
+      selectable: true,
+      contextMenuBuilder: onAiExplain == null
+          ? null
+          : (context, selectableRegionState) =>
+                _buildSelectionToolbar(context, selectableRegionState),
+      codeBuilder: (code, language) => _ReaderCodeBlock(
+        code: code,
+        language: language,
+        styleSheet: styleSheet,
+        settings: settings,
+      ),
       plugins: ParserPluginRegistry()..register(const MermaidPlugin()),
       builderRegistry: BuilderRegistry()
         ..register('table', const _ReaderTableBuilder())
-        ..register('mermaid', _AtlasMermaidBuilder(compact: compact)),
+        ..register(
+          'mermaid',
+          _AtlasMermaidBuilder(compact: compact, useJsMermaid: useJsMermaid),
+        ),
+    );
+  }
+
+  Widget _buildSelectionToolbar(
+    BuildContext context,
+    SmoothSelectionRegionState selectableRegionState,
+  ) {
+    final copyButtons = selectableRegionState.contextMenuButtonItems
+        .where((button) => button.type == ContextMenuButtonType.copy)
+        .toList();
+
+    return AdaptiveTextSelectionToolbar.buttonItems(
+      anchors: selectableRegionState.contextMenuAnchors,
+      buttonItems: [
+        ...copyButtons,
+        ContextMenuButtonItem(
+          label: 'AI 解释',
+          onPressed: () {
+            final innerState = selectableRegionState.innerRegionState;
+            // Flutter still exposes selected text through this deprecated API.
+            // Keeping the read localized makes future framework migration easy.
+            // ignore: deprecated_member_use
+            final textValue = innerState?.textEditingValue;
+            final selectedText =
+                textValue?.selection.textInside(textValue.text).trim() ?? '';
+            final anchor =
+                selectableRegionState.contextMenuAnchors.primaryAnchor;
+            selectableRegionState.clearSelection();
+            if (selectedText.isNotEmpty) {
+              onAiExplain?.call(selectedText, anchor);
+            }
+          },
+        ),
+      ],
     );
   }
 
@@ -56,19 +115,19 @@ class ReaderMarkdownView extends StatelessWidget {
       h1Style: headingBase.copyWith(
         fontSize: compact
             ? math.max(settings.fontSize + 5, 19)
-            : math.max(settings.fontSize + 18, 30),
+            : math.max(settings.fontSize + 12, 24),
         fontWeight: FontWeight.w700,
       ),
       h2Style: headingBase.copyWith(
         fontSize: compact
             ? math.max(settings.fontSize + 3, 17)
-            : math.max(settings.fontSize + 12, 25),
+            : math.max(settings.fontSize + 8, 21),
         fontWeight: FontWeight.w700,
       ),
       h3Style: headingBase.copyWith(
         fontSize: compact
             ? math.max(settings.fontSize + 2, 16)
-            : math.max(settings.fontSize + 8, 22),
+            : math.max(settings.fontSize + 5, 18),
         fontWeight: FontWeight.w600,
       ),
       h4Style: GoogleFonts.notoSansSc(
@@ -107,14 +166,14 @@ class ReaderMarkdownView extends StatelessWidget {
       ),
       codeBlockStyle: GoogleFonts.jetBrainsMono(
         textStyle: TextStyle(
-          fontSize: math.max(settings.fontSize - 2, 13),
+          fontSize: settings.fontSize.clamp(8, 24),
           height: 1.72,
           color: codeForeground,
         ),
       ),
       inlineCodeStyle: GoogleFonts.jetBrainsMono(
         textStyle: bodyStyle.copyWith(
-          fontSize: math.max(settings.fontSize - 2, 13),
+          fontSize: math.max(settings.fontSize - 1, 8),
           color: scheme.primary,
           backgroundColor: scheme.primaryContainer.withValues(alpha: 0.35),
         ),
@@ -129,13 +188,15 @@ class ReaderMarkdownView extends StatelessWidget {
       listBulletStyle: bodyStyle,
       tableHeaderStyle: GoogleFonts.notoSansSc(
         textStyle: theme.textTheme.titleSmall?.copyWith(
-          fontSize: settings.fontSize - 1,
+          fontSize: math.max(settings.fontSize - 1, 8),
           fontWeight: FontWeight.w700,
           color: scheme.onSurface,
         ),
       ),
       tableCellStyle: GoogleFonts.notoSansSc(
-        textStyle: bodyStyle.copyWith(fontSize: settings.fontSize - 0.5),
+        textStyle: bodyStyle.copyWith(
+          fontSize: math.max(settings.fontSize - 1, 8),
+        ),
       ),
       codeBlockDecoration: BoxDecoration(
         color: codeBackground,
@@ -169,10 +230,162 @@ class ReaderMarkdownView extends StatelessWidget {
   }
 }
 
+class _ReaderCodeBlock extends StatelessWidget {
+  const _ReaderCodeBlock({
+    required this.code,
+    required this.language,
+    required this.styleSheet,
+    required this.settings,
+  });
+
+  final String code;
+  final String? language;
+  final MarkdownStyleSheet styleSheet;
+  final ReadingSettings settings;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final isDark = theme.brightness == Brightness.dark;
+    final label = (language == null || language!.trim().isEmpty)
+        ? 'TEXT'
+        : language!.trim().toUpperCase();
+    final codeStyle =
+        styleSheet.codeBlockStyle ??
+        GoogleFonts.jetBrainsMono(fontSize: settings.fontSize);
+
+    return Container(
+      margin: const EdgeInsets.symmetric(vertical: 14),
+      decoration:
+          styleSheet.codeBlockDecoration ??
+          BoxDecoration(
+            color: scheme.surfaceContainerLow,
+            borderRadius: BorderRadius.circular(10),
+          ),
+      clipBehavior: Clip.antiAlias,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          DecoratedBox(
+            decoration: BoxDecoration(
+              color: isDark
+                  ? Colors.white.withValues(alpha: 0.06)
+                  : Colors.black.withValues(alpha: 0.04),
+              border: Border(
+                bottom: BorderSide(
+                  color: scheme.outlineVariant.withValues(alpha: 0.7),
+                ),
+              ),
+            ),
+            child: Padding(
+              padding: const EdgeInsetsDirectional.only(start: 12, end: 4),
+              child: Row(
+                children: [
+                  DecoratedBox(
+                    decoration: BoxDecoration(
+                      color: scheme.primaryContainer.withValues(alpha: 0.5),
+                      borderRadius: BorderRadius.circular(7),
+                    ),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 4,
+                      ),
+                      child: Text(
+                        label,
+                        style: GoogleFonts.jetBrainsMono(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w700,
+                          letterSpacing: 0.6,
+                          color: scheme.onPrimaryContainer,
+                        ),
+                      ),
+                    ),
+                  ),
+                  const Spacer(),
+                  IconButton(
+                    tooltip: '复制代码',
+                    visualDensity: VisualDensity.compact,
+                    iconSize: 18,
+                    onPressed: () async {
+                      await Clipboard.setData(ClipboardData(text: code));
+                      if (context.mounted) {
+                        ScaffoldMessenger.of(
+                          context,
+                        ).showSnackBar(const SnackBar(content: Text('代码已复制')));
+                      }
+                    },
+                    icon: const Icon(Icons.copy_rounded),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            padding: const EdgeInsets.only(bottom: 4),
+            child: HighlightView(
+              code,
+              language: _normalizeLanguage(language),
+              theme: isDark ? atom_dark.atomOneDarkTheme : github.githubTheme,
+              padding: styleSheet.codeBlockPadding,
+              textStyle: codeStyle,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  String? _normalizeLanguage(String? value) {
+    final language = value?.trim().toLowerCase();
+    if (language == null || language.isEmpty || language == 'text') {
+      return null;
+    }
+
+    final normalized = switch (language) {
+      'js' => 'javascript',
+      'ts' => 'typescript',
+      'sh' || 'bash' || 'shell' => 'bash',
+      _ => language,
+    };
+
+    const supportedLanguages = {
+      'bash',
+      'css',
+      'dart',
+      'diff',
+      'go',
+      'html',
+      'java',
+      'javascript',
+      'json',
+      'kotlin',
+      'markdown',
+      'python',
+      'ruby',
+      'rust',
+      'scss',
+      'sql',
+      'swift',
+      'typescript',
+      'xml',
+      'yaml',
+    };
+
+    return supportedLanguages.contains(normalized) ? normalized : null;
+  }
+}
+
 class _AtlasMermaidBuilder extends MarkdownWidgetBuilder {
-  const _AtlasMermaidBuilder({required this.compact});
+  const _AtlasMermaidBuilder({
+    required this.compact,
+    required this.useJsMermaid,
+  });
 
   final bool compact;
+  final bool useJsMermaid;
 
   @override
   bool canBuild(MarkdownNode node) => node is MermaidDiagramNode;
@@ -184,6 +397,10 @@ class _AtlasMermaidBuilder extends MarkdownWidgetBuilder {
     MarkdownRenderContext context,
   ) {
     final mermaidNode = node as MermaidDiagramNode;
+
+    if (useJsMermaid) {
+      return _MermaidJsDiagram(code: mermaidNode.code, compact: compact);
+    }
 
     return LayoutBuilder(
       builder: (context, constraints) {
@@ -247,6 +464,156 @@ class _AtlasMermaidBuilder extends MarkdownWidgetBuilder {
       nodeSpacingY: 64,
       padding: 28,
     );
+  }
+}
+
+class _MermaidJsDiagram extends StatefulWidget {
+  const _MermaidJsDiagram({required this.code, required this.compact});
+
+  final String code;
+  final bool compact;
+
+  @override
+  State<_MermaidJsDiagram> createState() => _MermaidJsDiagramState();
+}
+
+class _MermaidJsDiagramState extends State<_MermaidJsDiagram> {
+  late final WebViewController _controller;
+  double _height = 280;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = WebViewController()
+      ..setJavaScriptMode(JavaScriptMode.unrestricted)
+      ..setBackgroundColor(Colors.transparent)
+      ..addJavaScriptChannel(
+        'AtlasMermaid',
+        onMessageReceived: (message) {
+          final nextHeight = double.tryParse(message.message);
+          if (nextHeight == null || !mounted) return;
+          setState(() {
+            _height = nextHeight.clamp(180, 1200);
+          });
+        },
+      )
+      ..loadHtmlString(_html(widget.code, ThemeMode.system));
+  }
+
+  @override
+  void didUpdateWidget(covariant _MermaidJsDiagram oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.code != widget.code) {
+      _controller.loadHtmlString(_html(widget.code, ThemeMode.system));
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final width = widget.compact
+            ? constraints.maxWidth
+            : math.max(constraints.maxWidth, 980.0);
+
+        return Container(
+          margin: EdgeInsets.symmetric(vertical: widget.compact ? 8 : 18),
+          decoration: BoxDecoration(
+            color: scheme.surface,
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(
+              color: scheme.outlineVariant.withValues(alpha: 0.8),
+            ),
+          ),
+          clipBehavior: Clip.antiAlias,
+          child: SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: SizedBox(
+              width: width,
+              height: _height,
+              child: WebViewWidget(controller: _controller),
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  String _html(String code, ThemeMode themeMode) {
+    final encodedCode = base64Encode(utf8.encode(code));
+    final theme = themeMode == ThemeMode.dark ? 'dark' : 'default';
+    return '''
+<!doctype html>
+<html>
+<head>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <style>
+    html, body {
+      margin: 0;
+      padding: 0;
+      background: transparent;
+      overflow: hidden;
+      font-family: ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+    #container {
+      box-sizing: border-box;
+      min-width: 100%;
+      padding: 18px;
+    }
+    svg {
+      display: block;
+      max-width: none;
+      height: auto;
+    }
+    .error {
+      padding: 16px;
+      color: #991b1b;
+      background: #fef2f2;
+      border: 1px solid #fecaca;
+      border-radius: 10px;
+      font: 13px/1.55 ui-monospace, SFMono-Regular, Menlo, monospace;
+      white-space: pre-wrap;
+    }
+  </style>
+</head>
+<body>
+  <div id="container"></div>
+  <script type="module">
+    import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11.12.2/dist/mermaid.esm.min.mjs';
+
+    const source = decodeURIComponent(escape(atob('$encodedCode')));
+    const container = document.getElementById('container');
+
+    function reportHeight() {
+      const height = Math.ceil(document.documentElement.scrollHeight || document.body.scrollHeight || 280);
+      AtlasMermaid.postMessage(String(height));
+    }
+
+    try {
+      mermaid.initialize({
+        startOnLoad: false,
+        theme: '$theme',
+        securityLevel: 'loose',
+        fontFamily: 'ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
+        sequence: { mirrorActors: false, useMaxWidth: false },
+        flowchart: { useMaxWidth: false, htmlLabels: true, curve: 'basis' }
+      });
+      const id = 'atlas_mermaid_' + Math.random().toString(36).slice(2);
+      const result = await mermaid.render(id, source);
+      container.innerHTML = result.svg;
+      requestAnimationFrame(reportHeight);
+      new ResizeObserver(reportHeight).observe(container);
+    } catch (error) {
+      container.innerHTML = '<pre class="error"></pre>';
+      container.querySelector('.error').textContent = error?.message || String(error);
+      reportHeight();
+    }
+  </script>
+</body>
+</html>
+''';
   }
 }
 

@@ -12,7 +12,7 @@ final readingSettingsProvider =
 
 class ReadingSettings {
   const ReadingSettings({
-    this.fontSize = 17,
+    this.fontSize = 14,
     this.lineHeight = 1.65,
     this.pagePadding = AtlasSpacing.lg,
     this.eyeCare = false,
@@ -58,7 +58,7 @@ class ReadingSettingsController extends AsyncNotifier<ReadingSettings> {
   Future<ReadingSettings> build() async {
     final prefs = await SharedPreferences.getInstance();
     return ReadingSettings(
-      fontSize: prefs.getDouble(_fontSizeKey) ?? 17,
+      fontSize: prefs.getDouble(_fontSizeKey) ?? 14,
       lineHeight: prefs.getDouble(_lineHeightKey) ?? 1.65,
       pagePadding: prefs.getDouble(_pagePaddingKey) ?? AtlasSpacing.lg,
       eyeCare: prefs.getBool(_eyeCareKey) ?? false,

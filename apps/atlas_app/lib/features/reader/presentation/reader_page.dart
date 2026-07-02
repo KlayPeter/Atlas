@@ -407,57 +407,32 @@ class _ReaderScaffold extends StatelessWidget {
           ),
         ],
       ),
-      body: SelectionArea(
-        contextMenuBuilder: (context, selectableRegionState) {
-          final buttonItems = selectableRegionState.contextMenuButtonItems;
-          final copyButton = buttonItems
-              .where((b) => b.type == ContextMenuButtonType.copy)
-              .toList();
-
-          final customButtonItems = <ContextMenuButtonItem>[
-            ...copyButton,
-            ContextMenuButtonItem(
-              onPressed: () {
-                // ignore: deprecated_member_use
-                final textValue = selectableRegionState.textEditingValue;
-                final selectedText = textValue.selection.textInside(
-                  textValue.text,
-                );
-                final anchor =
-                    selectableRegionState.contextMenuAnchors.primaryAnchor;
-                selectableRegionState.hideToolbar();
-                if (selectedText.trim().isNotEmpty) {
-                  onAiExplain(selectedText.trim(), anchor);
-                }
-              },
-              label: 'AI 解释',
-            ),
-          ];
-
-          return AdaptiveTextSelectionToolbar.buttonItems(
-            anchors: selectableRegionState.contextMenuAnchors,
-            buttonItems: customButtonItems,
-          );
-        },
-        child: ListView(
-          controller: scrollController,
-          padding: EdgeInsets.fromLTRB(
-            math.min(settings.pagePadding, AtlasSpacing.md),
-            AtlasSpacing.sm,
-            math.min(settings.pagePadding, AtlasSpacing.md),
-            AtlasSpacing.xl,
-          ),
-          children: [
-            DecoratedBox(
-              decoration: BoxDecoration(color: paperColor),
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(8, 12, 8, 28),
-                child: document.summary.kind == DocumentKind.markdown
-                    ? ReaderMarkdownView(
-                        data: document.rawText,
-                        settings: settings,
-                      )
-                    : Column(
+      body: ListView(
+        controller: scrollController,
+        padding: EdgeInsets.fromLTRB(
+          math.min(settings.pagePadding, AtlasSpacing.md),
+          AtlasSpacing.sm,
+          math.min(settings.pagePadding, AtlasSpacing.md),
+          AtlasSpacing.xl,
+        ),
+        children: [
+          DecoratedBox(
+            decoration: BoxDecoration(color: paperColor),
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(8, 12, 8, 28),
+              child: document.summary.kind == DocumentKind.markdown
+                  ? ReaderMarkdownView(
+                      data: document.rawText,
+                      settings: settings,
+                      onAiExplain: onAiExplain,
+                    )
+                  : SelectionArea(
+                      contextMenuBuilder: (context, selectableRegionState) =>
+                          _buildPlainTextSelectionToolbar(
+                            context,
+                            selectableRegionState,
+                          ),
+                      child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           for (final paragraph in document.paragraphs)
@@ -472,16 +447,48 @@ class _ReaderScaffold extends StatelessWidget {
                             ),
                         ],
                       ),
-              ),
+                    ),
             ),
-          ],
-        ),
+          ),
+        ],
       ),
       floatingActionButton: FloatingActionButton(
         onPressed: onAi,
         tooltip: 'AI 助手',
         child: const Icon(Icons.auto_awesome_outlined),
       ),
+    );
+  }
+
+  Widget _buildPlainTextSelectionToolbar(
+    BuildContext context,
+    SelectableRegionState selectableRegionState,
+  ) {
+    final copyButtons = selectableRegionState.contextMenuButtonItems
+        .where((button) => button.type == ContextMenuButtonType.copy)
+        .toList();
+
+    return AdaptiveTextSelectionToolbar.buttonItems(
+      anchors: selectableRegionState.contextMenuAnchors,
+      buttonItems: [
+        ...copyButtons,
+        ContextMenuButtonItem(
+          label: 'AI 解释',
+          onPressed: () {
+            // ignore: deprecated_member_use
+            final textValue = selectableRegionState.textEditingValue;
+            final selectedText = textValue.selection
+                .textInside(textValue.text)
+                .trim();
+            final anchor =
+                selectableRegionState.contextMenuAnchors.primaryAnchor;
+            selectableRegionState.hideToolbar();
+            if (selectedText.isNotEmpty) {
+              onAiExplain(selectedText, anchor);
+            }
+          },
+        ),
+      ],
     );
   }
 }
@@ -512,13 +519,6 @@ class _InlineExplanationOverlay extends StatelessWidget {
 
     return Stack(
       children: [
-        Positioned.fill(
-          child: GestureDetector(
-            behavior: HitTestBehavior.translucent,
-            onTap: onClose,
-            child: const SizedBox.expand(),
-          ),
-        ),
         Positioned(
           left: left,
           top: top,
@@ -625,9 +625,9 @@ class _ReadingSettingsSheet extends ConsumerWidget {
             Text('字号 ${settings.fontSize.round()}'),
             Slider(
               value: settings.fontSize,
-              min: 14,
+              min: 8,
               max: 24,
-              divisions: 10,
+              divisions: 16,
               onChanged: (value) => ref
                   .read(readingSettingsProvider.notifier)
                   .updateSettings(settings.copyWith(fontSize: value)),
