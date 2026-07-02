@@ -152,9 +152,6 @@ class _ReaderPageState extends ConsumerState<ReaderPage> {
                     right: AtlasSpacing.md,
                   ),
                   title: Text(section.title),
-                  subtitle: section.preview.isEmpty
-                      ? null
-                      : Text(section.preview),
                   onTap: () {
                     Navigator.of(context).pop();
                     _jumpToSection(document, section);
