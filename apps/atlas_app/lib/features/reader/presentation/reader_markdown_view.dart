@@ -21,6 +21,7 @@ class ReaderMarkdownView extends StatelessWidget {
     this.compact = false,
     this.onAiExplain,
     this.useJsMermaid = true,
+    this.headerKeys,
   });
 
   final String data;
@@ -28,6 +29,7 @@ class ReaderMarkdownView extends StatelessWidget {
   final bool compact;
   final void Function(String text, Offset anchor)? onAiExplain;
   final bool useJsMermaid;
+  final Map<String, List<GlobalKey>>? headerKeys;
 
   @override
   Widget build(BuildContext context) {
@@ -52,6 +54,7 @@ class ReaderMarkdownView extends StatelessWidget {
       imageBuilder: (url, alt, title) => _buildImage(context, url, alt, title),
       plugins: ParserPluginRegistry()..register(const MermaidPlugin()),
       builderRegistry: BuilderRegistry()
+        ..register('header', _AtlasHeaderBuilder(headerKeys))
         ..register('table', const _ReaderTableBuilder())
         ..register(
           'mermaid',
@@ -740,13 +743,17 @@ class _ReaderTableBuilder extends MarkdownWidgetBuilder {
             ),
             borderRadius: BorderRadius.circular(8),
           ),
-          child: Padding(
+          child: SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
             padding: const EdgeInsets.only(bottom: 4),
-            child: Table(
-              border: styleSheet.tableBorder,
-              defaultColumnWidth: const FlexColumnWidth(),
-              defaultVerticalAlignment: TableCellVerticalAlignment.middle,
-              children: rows,
+            child: ConstrainedBox(
+              constraints: BoxConstraints(minWidth: constraints.maxWidth),
+              child: Table(
+                border: styleSheet.tableBorder,
+                defaultColumnWidth: const IntrinsicColumnWidth(),
+                defaultVerticalAlignment: TableCellVerticalAlignment.middle,
+                children: rows,
+              ),
             ),
           ),
         ),
@@ -943,6 +950,44 @@ class _ImageFullScreenViewer extends StatelessWidget {
           child: image,
         ),
       ),
+    );
+  }
+}
+
+class _AtlasHeaderBuilder extends MarkdownWidgetBuilder {
+  _AtlasHeaderBuilder(this.headerKeys);
+  final Map<String, List<GlobalKey>>? headerKeys;
+  final _delegate = const EnhancedHeaderBuilder();
+
+  @override
+  bool canBuild(MarkdownNode node) => _delegate.canBuild(node);
+
+  @override
+  Widget build(MarkdownNode node, MarkdownStyleSheet styleSheet, MarkdownRenderContext context) {
+    final headerNode = node as HeaderNode;
+    final widget = _delegate.build(node, styleSheet, context);
+    if (headerKeys == null) return widget;
+
+    // Remove inline markdown syntax from the header node's content, 
+    // to match how DocumentSection.title is generated.
+    final title = headerNode.content
+        .replaceAll(RegExp(r'[`*_~\[\]()>#-]'), '')
+        .replaceAll(RegExp(r'\s+'), ' ')
+        .trim();
+    final keyString = '${headerNode.level}:$title';
+    
+    // Create a new GlobalKey for this header
+    final headerKey = GlobalKey();
+    
+    // Add it to the map
+    if (!headerKeys!.containsKey(keyString)) {
+      headerKeys![keyString] = [];
+    }
+    headerKeys![keyString]!.add(headerKey);
+
+    return Container(
+      key: headerKey,
+      child: widget,
     );
   }
 }

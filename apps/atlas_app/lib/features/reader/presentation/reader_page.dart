@@ -84,6 +84,7 @@ class _ReaderPageState extends ConsumerState<ReaderPage> {
           onHtml: () =>
               context.push(AppRoutes.htmlPreviewPath(content.summary.id)),
           onShareHtml: () => _shareHtml(content),
+          headerKeys: _headerKeys,
         );
       },
     );
@@ -124,10 +125,12 @@ class _ReaderPageState extends ConsumerState<ReaderPage> {
         .clamp(0, math.max(0, max))
         .toDouble();
     final progress = max <= 0 ? 0.0 : offset / max;
-    await ref
-        .read(documentRepositoryProvider)
-        .saveProgress(id, offset, progress);
-    ref.read(libraryControllerProvider.notifier).refresh();
+    
+    final repo = ref.read(documentRepositoryProvider);
+    final libNotifier = ref.read(libraryControllerProvider.notifier);
+    
+    await repo.saveProgress(id, offset, progress);
+    libNotifier.refresh();
   }
 
   Future<void> _showToc(DocumentContent document) {
@@ -163,10 +166,35 @@ class _ReaderPageState extends ConsumerState<ReaderPage> {
     );
   }
 
+  final Map<String, List<GlobalKey>> _headerKeys = {};
+
   void _jumpToSection(DocumentContent document, DocumentSection section) {
     if (!_scrollController.hasClients || document.rawText.isEmpty) {
       return;
     }
+    
+    final keyString = '${section.level}:${section.title}';
+    final keys = _headerKeys[keyString];
+    
+    if (keys != null && keys.isNotEmpty) {
+      // Find the best matching key based on order (rough approximation)
+      // For exact matching, we would need the actual index, but since DocumentSection
+      // doesn't have an index, we just pick the first one for now, or we can find
+      // the closest offset.
+      final targetKey = keys.first; // usually the first one works for most documents
+      final context = targetKey.currentContext;
+      if (context != null) {
+        Scrollable.ensureVisible(
+          context,
+          duration: const Duration(milliseconds: 280),
+          curve: Curves.easeOut,
+          alignment: 0.05, // scroll a bit down from top
+        );
+        return;
+      }
+    }
+
+    // Fallback to ratio-based jump if key is not found
     final ratio = section.startOffset / document.rawText.length;
     _scrollController.animateTo(
       _scrollController.position.maxScrollExtent * ratio,
@@ -348,6 +376,7 @@ class _ReaderScaffold extends StatelessWidget {
     required this.onSettings,
     required this.onHtml,
     required this.onShareHtml,
+    required this.headerKeys,
   });
 
   final DocumentContent document;
@@ -360,6 +389,7 @@ class _ReaderScaffold extends StatelessWidget {
   final VoidCallback onSettings;
   final VoidCallback onHtml;
   final VoidCallback onShareHtml;
+  final Map<String, List<GlobalKey>> headerKeys;
 
   @override
   Widget build(BuildContext context) {
@@ -424,6 +454,7 @@ class _ReaderScaffold extends StatelessWidget {
                       data: document.rawText,
                       settings: settings,
                       onAiExplain: onAiExplain,
+                      headerKeys: headerKeys,
                     )
                   : SelectionArea(
                       contextMenuBuilder: (context, selectableRegionState) =>
