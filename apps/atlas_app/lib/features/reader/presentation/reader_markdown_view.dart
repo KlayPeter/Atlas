@@ -548,8 +548,12 @@ class _MermaidJsDiagramState extends State<_MermaidJsDiagram> {
         'AtlasMermaid',
         onMessageReceived: (message) {
           if (message.message == 'CLICK') {
+            final isDark = Theme.of(context).brightness == Brightness.dark;
             Navigator.of(context).push(MaterialPageRoute(
-              builder: (_) => _MermaidFullScreenViewer(code: widget.code),
+              builder: (_) => _MermaidFullScreenViewer(
+                code: widget.code,
+                isDark: isDark,
+              ),
             ));
             return;
           }
@@ -818,8 +822,9 @@ class _ReaderTableBuilder extends MarkdownWidgetBuilder {
 }
 
 class _MermaidFullScreenViewer extends StatefulWidget {
-  const _MermaidFullScreenViewer({required this.code});
+  const _MermaidFullScreenViewer({required this.code, required this.isDark});
   final String code;
+  final bool isDark;
   @override
   State<_MermaidFullScreenViewer> createState() => _MermaidFullScreenViewerState();
 }
@@ -832,17 +837,18 @@ class _MermaidFullScreenViewerState extends State<_MermaidFullScreenViewer> {
     super.initState();
     _controller = WebViewController()
       ..setJavaScriptMode(JavaScriptMode.unrestricted)
-      ..setBackgroundColor(Colors.black)
-      ..loadHtmlString(_html(widget.code, ThemeMode.dark));
+      ..setBackgroundColor(Colors.transparent)
+      ..loadHtmlString(_html(widget.code, widget.isDark));
   }
 
   @override
   Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
     return Scaffold(
-      backgroundColor: Colors.black,
+      backgroundColor: scheme.surface,
       appBar: AppBar(
-        backgroundColor: Colors.black,
-        iconTheme: const IconThemeData(color: Colors.white),
+        backgroundColor: scheme.surface,
+        iconTheme: IconThemeData(color: scheme.onSurface),
         elevation: 0,
       ),
       body: SafeArea(
@@ -851,9 +857,9 @@ class _MermaidFullScreenViewerState extends State<_MermaidFullScreenViewer> {
     );
   }
 
-  String _html(String code, ThemeMode themeMode) {
+  String _html(String code, bool isDark) {
     final encodedCode = base64Encode(utf8.encode(code));
-    final theme = themeMode == ThemeMode.dark ? 'dark' : 'default';
+    final theme = isDark ? 'dark' : 'default';
     return '''
 <!doctype html>
 <html>
@@ -863,12 +869,8 @@ class _MermaidFullScreenViewerState extends State<_MermaidFullScreenViewer> {
     html, body {
       margin: 0;
       padding: 0;
-      background: #000;
-      color: #fff;
+      background: transparent;
       min-height: 100vh;
-      display: flex;
-      align-items: center;
-      justify-content: center;
     }
     #container {
       box-sizing: border-box;
@@ -928,11 +930,13 @@ class _ImageFullScreenViewer extends StatelessWidget {
       }
     }
 
+    final scheme = Theme.of(context).colorScheme;
+
     return Scaffold(
-      backgroundColor: Colors.black,
+      backgroundColor: scheme.surface,
       appBar: AppBar(
-        backgroundColor: Colors.black,
-        iconTheme: const IconThemeData(color: Colors.white),
+        backgroundColor: scheme.surface,
+        iconTheme: IconThemeData(color: scheme.onSurface),
         elevation: 0,
       ),
       body: InteractiveViewer(
