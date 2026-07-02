@@ -1,46 +1,69 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:go_router/go_router.dart';
 
-import '../../../app/routing/app_routes.dart';
 import '../../../app/theme/app_theme.dart';
 import '../../../domain/document/document_content.dart';
 import '../application/ai_models.dart';
 import '../data/ai_api_client.dart';
 import '../data/ai_history_repository.dart';
 
+import 'study_page.dart';
+
 class AiPanel extends ConsumerStatefulWidget {
-  const AiPanel({super.key, required this.document});
+  const AiPanel({super.key, required this.document, this.initialSelection});
 
   final DocumentContent document;
+  final String? initialSelection;
 
   @override
   ConsumerState<AiPanel> createState() => _AiPanelState();
 }
 
 class _AiPanelState extends ConsumerState<AiPanel> {
-  final _selectionController = TextEditingController();
   final _questionController = TextEditingController();
   AiResult? _result;
   List<AiHistoryEntry> _history = const [];
   Object? _error;
   var _loading = false;
+  var _isStudyMode = false;
 
   @override
   void initState() {
     super.initState();
     _loadHistory();
+    if (widget.initialSelection != null && widget.initialSelection!.isNotEmpty) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _explain();
+      });
+    }
   }
 
   @override
   void dispose() {
-    _selectionController.dispose();
     _questionController.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
+    if (_isStudyMode) {
+      return SafeArea(
+        top: false,
+        child: Padding(
+          padding: EdgeInsets.only(
+            left: AtlasSpacing.md,
+            right: AtlasSpacing.md,
+            top: AtlasSpacing.md,
+            bottom: MediaQuery.viewInsetsOf(context).bottom + AtlasSpacing.md,
+          ),
+          child: StudyView(
+            document: widget.document,
+            onBack: () => setState(() => _isStudyMode = false),
+          ),
+        ),
+      );
+    }
+
     return SafeArea(
       top: false,
       child: Padding(
@@ -65,25 +88,10 @@ class _AiPanelState extends ConsumerState<AiPanel> {
               ],
             ),
             const SizedBox(height: AtlasSpacing.sm),
-            TextField(
-              controller: _selectionController,
-              minLines: 2,
-              maxLines: 4,
-              decoration: const InputDecoration(
-                labelText: '选中文本 / 段落',
-                hintText: '粘贴需要解释的词、句子或段落',
-              ),
-            ),
-            const SizedBox(height: AtlasSpacing.sm),
-              Wrap(
+            Wrap(
               spacing: AtlasSpacing.sm,
               runSpacing: AtlasSpacing.sm,
               children: [
-                FilledButton.icon(
-                  onPressed: _loading ? null : _explain,
-                  icon: const Icon(Icons.auto_awesome_outlined),
-                  label: const Text('解释'),
-                ),
                 OutlinedButton.icon(
                   onPressed: _loading ? null : _summarize,
                   icon: const Icon(Icons.summarize_outlined),
@@ -92,13 +100,7 @@ class _AiPanelState extends ConsumerState<AiPanel> {
                 OutlinedButton.icon(
                   onPressed: _loading
                       ? null
-                      : () {
-                          Navigator.of(context).pop();
-                          context.push(
-                            AppRoutes.studyPath(widget.document.summary.id),
-                            extra: widget.document,
-                          );
-                        },
+                      : () => setState(() => _isStudyMode = true),
                   icon: const Icon(Icons.school_outlined),
                   label: const Text('进入学习模式'),
                 ),
@@ -197,11 +199,9 @@ class _AiPanelState extends ConsumerState<AiPanel> {
   }
 
   Future<void> _explain() {
-    final selectedText = _selectionController.text.trim();
-    if (selectedText.isEmpty) {
-      _selectionController.text = widget.document.paragraphs.firstOrNull ?? '';
-    }
-    final prompt = _selectionController.text.trim();
+    final prompt = widget.initialSelection?.trim() ?? '';
+    if (prompt.isEmpty) return Future.value();
+    
     return _run(
       kind: AiHistoryKind.explanation,
       prompt: prompt,

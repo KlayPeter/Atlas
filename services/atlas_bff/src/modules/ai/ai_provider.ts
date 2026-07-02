@@ -188,9 +188,13 @@ class OpenAiProvider implements AiProvider {
     const response = await this.client.chat.completions.create({
       model: this.model,
       messages: [{ role: 'user', content: prompt }],
-      response_format: { type: 'json_object' },
     });
-    return response.choices[0].message.content ?? '{}';
+    let content = response.choices[0].message.content ?? '{}';
+    const match = content.match(/```(?:json)?\s*([\s\S]*?)\s*```/);
+    if (match) {
+      content = match[1];
+    }
+    return content;
   }
 }
 

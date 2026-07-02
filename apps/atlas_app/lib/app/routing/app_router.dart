@@ -6,8 +6,6 @@ import '../../features/html_export/presentation/html_preview_page.dart';
 import '../../features/library/presentation/library_page.dart';
 import '../../features/reader/presentation/reader_page.dart';
 import '../../features/settings/presentation/settings_page.dart';
-import '../../features/ai/presentation/study_page.dart';
-import '../../domain/document/document_content.dart';
 import 'app_routes.dart';
 
 final appRouterProvider = Provider<GoRouter>((ref) {
@@ -37,21 +35,6 @@ final appRouterProvider = Provider<GoRouter>((ref) {
         builder: (context, state) {
           final exportId = state.pathParameters['exportId'];
           return HtmlPreviewPage(exportId: exportId);
-        },
-      ),
-      GoRoute(
-        path: AppRoutes.study,
-        builder: (context, state) {
-          // Note: StudyPage needs a DocumentContent. We should probably fetch it inside StudyPage 
-          // or pass it from ReaderPage. But since we don't pass complex objects in GoRouter path,
-          // it's better to fetch it inside StudyPage. Let me check how ReaderPage fetches it.
-          // Wait, I designed StudyPage to take `required this.document`.
-          // If we navigate from AiPanel, we can pass it as `extra`.
-          final document = state.extra;
-          if (document is! DocumentContent) {
-            return const UnknownRoutePage();
-          }
-          return StudyPage(document: document);
         },
       ),
       GoRoute(

@@ -7,16 +7,21 @@ import '../../../domain/document/document_content.dart';
 import '../application/ai_models.dart';
 import '../data/ai_api_client.dart';
 
-class StudyPage extends ConsumerStatefulWidget {
-  const StudyPage({super.key, required this.document});
+class StudyView extends ConsumerStatefulWidget {
+  const StudyView({
+    super.key,
+    required this.document,
+    required this.onBack,
+  });
 
   final DocumentContent document;
+  final VoidCallback onBack;
 
   @override
-  ConsumerState<StudyPage> createState() => _StudyPageState();
+  ConsumerState<StudyView> createState() => _StudyViewState();
 }
 
-class _StudyPageState extends ConsumerState<StudyPage> {
+class _StudyViewState extends ConsumerState<StudyView> {
   var _loading = true;
   Object? _error;
   StudyResult? _result;
@@ -76,30 +81,53 @@ class _StudyPageState extends ConsumerState<StudyPage> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: const Text('学习模式')),
-      body: _buildBody(),
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Row(
+          children: [
+            IconButton(
+              icon: const Icon(Icons.arrow_back),
+              onPressed: widget.onBack,
+              tooltip: '返回',
+            ),
+            Text('学习模式', style: Theme.of(context).textTheme.titleMedium),
+            const Spacer(),
+            IconButton(
+              tooltip: '关闭',
+              onPressed: () => Navigator.of(context).pop(),
+              icon: const Icon(Icons.close),
+            ),
+          ],
+        ),
+        const SizedBox(height: AtlasSpacing.md),
+        _buildBody(),
+      ],
     );
   }
 
   Widget _buildBody() {
     if (_loading) {
-      return const Center(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            CircularProgressIndicator(),
-            SizedBox(height: AtlasSpacing.md),
-            Text('正在基于当前文档生成题目...'),
-          ],
+      return const Padding(
+        padding: EdgeInsets.all(AtlasSpacing.xl),
+        child: Center(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              CircularProgressIndicator(),
+              SizedBox(height: AtlasSpacing.md),
+              Text('正在基于当前文档生成题目...'),
+            ],
+          ),
         ),
       );
     }
 
     if (_error != null) {
-      return Center(
-        child: Padding(
-          padding: const EdgeInsets.all(AtlasSpacing.lg),
+      return Padding(
+        padding: const EdgeInsets.all(AtlasSpacing.lg),
+        child: Center(
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
@@ -121,14 +149,19 @@ class _StudyPageState extends ConsumerState<StudyPage> {
 
     final result = _result;
     if (result == null || result.questions.isEmpty) {
-      return const Center(child: Text('没有生成任何题目，请尝试其他文档。'));
+      return const Padding(
+        padding: EdgeInsets.all(AtlasSpacing.xl),
+        child: Center(child: Text('没有生成任何题目，请尝试其他文档。')),
+      );
     }
 
     final question = result.questions[_currentIndex];
 
     return Padding(
-      padding: const EdgeInsets.all(AtlasSpacing.md),
+      padding: const EdgeInsets.symmetric(horizontal: AtlasSpacing.sm),
       child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           LinearProgressIndicator(
             value: (_currentIndex + 1) / result.questions.length,
@@ -137,43 +170,38 @@ class _StudyPageState extends ConsumerState<StudyPage> {
           Text(
             '题目 ${_currentIndex + 1} / ${result.questions.length}',
             style: Theme.of(context).textTheme.labelLarge,
+            textAlign: TextAlign.center,
           ),
-          const SizedBox(height: AtlasSpacing.lg),
-          Expanded(
-            child: Card(
-              child: InkWell(
-                onTap: () => setState(() => _showAnswer = !_showAnswer),
-                child: Padding(
-                  padding: const EdgeInsets.all(AtlasSpacing.xl),
-                  child: Center(
-                    child: SingleChildScrollView(
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Text(
-                            question.question,
-                            textAlign: TextAlign.center,
-                            style: Theme.of(context).textTheme.headlineSmall,
-                          ),
-                          const SizedBox(height: AtlasSpacing.xl),
-                          if (_showAnswer)
-                            Text(
-                              question.referenceAnswer,
-                              textAlign: TextAlign.center,
-                              style: Theme.of(context).textTheme.bodyLarge,
-                            )
-                          else
-                            const Text('点击卡片查看答案',
-                                style: TextStyle(color: Colors.grey)),
-                        ],
-                      ),
+          const SizedBox(height: AtlasSpacing.md),
+          Card(
+            child: InkWell(
+              onTap: () => setState(() => _showAnswer = !_showAnswer),
+              child: Padding(
+                padding: const EdgeInsets.all(AtlasSpacing.lg),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      question.question,
+                      textAlign: TextAlign.center,
+                      style: Theme.of(context).textTheme.titleMedium,
                     ),
-                  ),
+                    const SizedBox(height: AtlasSpacing.md),
+                    if (_showAnswer)
+                      Text(
+                        question.referenceAnswer,
+                        textAlign: TextAlign.center,
+                        style: Theme.of(context).textTheme.bodyMedium,
+                      )
+                    else
+                      const Text('点击卡片查看答案',
+                          style: TextStyle(color: Colors.grey)),
+                  ],
                 ),
               ),
             ),
           ),
-          const SizedBox(height: AtlasSpacing.lg),
+          const SizedBox(height: AtlasSpacing.md),
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
@@ -189,7 +217,6 @@ class _StudyPageState extends ConsumerState<StudyPage> {
               ),
             ],
           ),
-          const SizedBox(height: AtlasSpacing.lg),
         ],
       ),
     );

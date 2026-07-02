@@ -7,9 +7,9 @@ class AiSettings {
   final String modelName;
 
   const AiSettings({
-    this.apiKey = '',
-    this.baseUrl = '',
-    this.modelName = '',
+    this.apiKey = 'xxx',
+    this.baseUrl = 'https://api.deepseek.com/v1',
+    this.modelName = 'deepseek-v4-pro',
   });
 
   AiSettings copyWith({
@@ -33,10 +33,15 @@ class AiSettingsController extends AsyncNotifier<AiSettings> {
   @override
   Future<AiSettings> build() async {
     final prefs = await SharedPreferences.getInstance();
+    String getPref(String key, String defaultValue) {
+      final val = prefs.getString(key);
+      return (val != null && val.isNotEmpty) ? val : defaultValue;
+    }
+    
     return AiSettings(
-      apiKey: prefs.getString(_keyApiKey) ?? '',
-      baseUrl: prefs.getString(_keyBaseUrl) ?? '',
-      modelName: prefs.getString(_keyModelName) ?? '',
+      apiKey: getPref(_keyApiKey, 'xxx'),
+      baseUrl: getPref(_keyBaseUrl, 'https://api.deepseek.com/v1'),
+      modelName: getPref(_keyModelName, 'deepseek-v4-pro'),
     );
   }
 

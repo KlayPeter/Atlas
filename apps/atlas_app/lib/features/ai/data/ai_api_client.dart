@@ -162,15 +162,19 @@ class AiApiClient {
     final token = await _deviceToken();
     final prefs = await SharedPreferences.getInstance();
     
-    final apiKey = prefs.getString('ai_settings_api_key') ?? '';
-    final baseUrl = prefs.getString('ai_settings_base_url') ?? '';
-    final modelName = prefs.getString('ai_settings_model_name') ?? '';
+    final apiKey = prefs.getString('ai_settings_api_key');
+    final baseUrl = prefs.getString('ai_settings_base_url');
+    final modelName = prefs.getString('ai_settings_model_name');
+    
+    final finalApiKey = (apiKey != null && apiKey.isNotEmpty) ? apiKey : 'xxx';
+    final finalBaseUrl = (baseUrl != null && baseUrl.isNotEmpty) ? baseUrl : 'https://api.deepseek.com/v1';
+    final finalModelName = (modelName != null && modelName.isNotEmpty) ? modelName : 'deepseek-v4-pro';
 
     return {
       'Authorization': 'Bearer $token',
-      if (apiKey.isNotEmpty) 'x-ai-provider-api-key': apiKey,
-      if (baseUrl.isNotEmpty) 'x-ai-provider-base-url': baseUrl,
-      if (modelName.isNotEmpty) 'x-ai-provider-model': modelName,
+      if (finalApiKey.isNotEmpty) 'x-ai-provider-api-key': finalApiKey,
+      if (finalBaseUrl.isNotEmpty) 'x-ai-provider-base-url': finalBaseUrl,
+      if (finalModelName.isNotEmpty) 'x-ai-provider-model': finalModelName,
     };
   }
 

@@ -63,7 +63,7 @@ class ShareImportController {
       }
       try {
         final document = await repository.importFile(file);
-        router.go(AppRoutes.readerPath(document.id));
+        router.push(AppRoutes.readerPath(document.id));
       } on DocumentImportFailure {
         continue;
       }

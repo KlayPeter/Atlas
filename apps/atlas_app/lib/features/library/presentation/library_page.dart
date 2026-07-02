@@ -20,7 +20,7 @@ class LibraryPage extends ConsumerWidget {
         actions: [
           IconButton(
             tooltip: '设置',
-            onPressed: () => context.go(AppRoutes.settings),
+            onPressed: () => context.push(AppRoutes.settings),
             icon: const Icon(Icons.tune),
           ),
         ],
@@ -57,7 +57,7 @@ class LibraryPage extends ConsumerWidget {
                           icon: const Icon(Icons.delete_outline),
                         ),
                         onTap: () =>
-                            context.go(AppRoutes.readerPath(document.id)),
+                            context.push(AppRoutes.readerPath(document.id)),
                       ),
                     );
                   },
@@ -75,7 +75,7 @@ class LibraryPage extends ConsumerWidget {
               .read(libraryControllerProvider.notifier)
               .importDocument();
           if (document != null) {
-            router.go(AppRoutes.readerPath(document.id));
+            router.push(AppRoutes.readerPath(document.id));
           } else if (context.mounted) {
             messenger.showSnackBar(const SnackBar(content: Text('未导入文件')));
           }

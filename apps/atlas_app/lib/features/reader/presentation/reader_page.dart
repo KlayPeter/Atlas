@@ -75,9 +75,10 @@ class _ReaderPageState extends ConsumerState<ReaderPage> {
           onShowToc: () => _showToc(content),
           onSearch: () => _showSearch(content),
           onAi: () => _showAi(content),
+          onAiExplain: (text) => _showAi(content, initialSelection: text),
           onSettings: () => _showSettings(readingSettings),
           onHtml: () =>
-              context.go(AppRoutes.htmlPreviewPath(content.summary.id)),
+              context.push(AppRoutes.htmlPreviewPath(content.summary.id)),
           onShareHtml: () => _shareHtml(content),
         );
       },
@@ -238,12 +239,12 @@ class _ReaderPageState extends ConsumerState<ReaderPage> {
     ).allMatches(source).map((match) => match.start).toList(growable: false);
   }
 
-  Future<void> _showAi(DocumentContent document) {
+  Future<void> _showAi(DocumentContent document, {String? initialSelection}) {
     return showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
       showDragHandle: true,
-      builder: (context) => AiPanel(document: document),
+      builder: (context) => AiPanel(document: document, initialSelection: initialSelection),
     );
   }
 
@@ -311,6 +312,7 @@ class _ReaderScaffold extends StatelessWidget {
     required this.onShowToc,
     required this.onSearch,
     required this.onAi,
+    required this.onAiExplain,
     required this.onSettings,
     required this.onHtml,
     required this.onShareHtml,
@@ -322,6 +324,7 @@ class _ReaderScaffold extends StatelessWidget {
   final VoidCallback onShowToc;
   final VoidCallback onSearch;
   final VoidCallback onAi;
+  final ValueChanged<String> onAiExplain;
   final VoidCallback onSettings;
   final VoidCallback onHtml;
   final VoidCallback onShareHtml;
@@ -347,11 +350,6 @@ class _ReaderScaffold extends StatelessWidget {
             onPressed: onSearch,
             icon: const Icon(Icons.search),
           ),
-          IconButton(
-            tooltip: 'AI',
-            onPressed: onAi,
-            icon: const Icon(Icons.auto_awesome_outlined),
-          ),
           PopupMenuButton<String>(
             tooltip: '更多',
             onSelected: (value) {
@@ -372,43 +370,75 @@ class _ReaderScaffold extends StatelessWidget {
           ),
         ],
       ),
-      body: ListView(
-        controller: scrollController,
-        padding: EdgeInsets.fromLTRB(
-          settings.pagePadding,
-          AtlasSpacing.md,
-          settings.pagePadding,
-          AtlasSpacing.xl,
-        ),
-        children: [
-          if (document.summary.kind == DocumentKind.markdown)
-            MarkdownBody(
-              data: document.rawText,
-              selectable: true,
-              styleSheet: MarkdownStyleSheet.fromTheme(Theme.of(context))
-                  .copyWith(
-                    p: settings.bodyStyle(context),
-                    listBullet: settings.bodyStyle(context),
-                    blockquote: settings.bodyStyle(context),
-                    codeblockDecoration: BoxDecoration(
-                      color: Theme.of(
-                        context,
-                      ).colorScheme.surfaceContainerHighest,
-                      borderRadius: BorderRadius.circular(8),
+      body: SelectionArea(
+        contextMenuBuilder: (context, selectableRegionState) {
+          final buttonItems = selectableRegionState.contextMenuButtonItems;
+          final copyButton = buttonItems.where((b) => b.type == ContextMenuButtonType.copy).toList();
+          
+          final customButtonItems = <ContextMenuButtonItem>[
+            ...copyButton,
+            ContextMenuButtonItem(
+              onPressed: () {
+                // ignore: deprecated_member_use
+                final textValue = selectableRegionState.textEditingValue;
+                final selectedText = textValue.selection.textInside(textValue.text);
+                selectableRegionState.hideToolbar();
+                if (selectedText.trim().isNotEmpty) {
+                  onAiExplain(selectedText.trim());
+                }
+              },
+              label: 'AI 解释',
+            ),
+          ];
+
+          return AdaptiveTextSelectionToolbar.buttonItems(
+            anchors: selectableRegionState.contextMenuAnchors,
+            buttonItems: customButtonItems,
+          );
+        },
+        child: ListView(
+          controller: scrollController,
+          padding: EdgeInsets.fromLTRB(
+            settings.pagePadding,
+            AtlasSpacing.md,
+            settings.pagePadding,
+            AtlasSpacing.xl,
+          ),
+          children: [
+            if (document.summary.kind == DocumentKind.markdown)
+              MarkdownBody(
+                data: document.rawText,
+                selectable: false,
+                styleSheet: MarkdownStyleSheet.fromTheme(Theme.of(context))
+                    .copyWith(
+                      p: settings.bodyStyle(context),
+                      listBullet: settings.bodyStyle(context),
+                      blockquote: settings.bodyStyle(context),
+                      codeblockDecoration: BoxDecoration(
+                        color: Theme.of(
+                          context,
+                        ).colorScheme.surfaceContainerHighest,
+                        borderRadius: BorderRadius.circular(8),
+                      ),
                     ),
+              )
+            else
+              ...document.paragraphs.map(
+                (paragraph) => Padding(
+                  padding: const EdgeInsets.only(bottom: AtlasSpacing.md),
+                  child: Text(
+                    paragraph,
+                    style: settings.bodyStyle(context),
                   ),
-            )
-          else
-            ...document.paragraphs.map(
-              (paragraph) => Padding(
-                padding: const EdgeInsets.only(bottom: AtlasSpacing.md),
-                child: SelectableText(
-                  paragraph,
-                  style: settings.bodyStyle(context),
                 ),
               ),
-            ),
-        ],
+          ],
+        ),
+      ),
+      floatingActionButton: FloatingActionButton(
+        onPressed: onAi,
+        tooltip: 'AI 助手',
+        child: const Icon(Icons.auto_awesome_outlined),
       ),
     );
   }
