@@ -91,20 +91,17 @@ class ReaderMarkdownView extends StatelessWidget {
           ),
         );
       },
-      child: Hero(
-        tag: url,
-        child: Container(
-          constraints: const BoxConstraints(maxHeight: 500, minWidth: double.infinity),
-          margin: const EdgeInsets.symmetric(vertical: 12),
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(8),
-            border: Border.all(
-              color: Theme.of(context).colorScheme.outlineVariant.withValues(alpha: 0.5),
-            ),
+      child: Container(
+        constraints: const BoxConstraints(maxHeight: 500, minWidth: double.infinity),
+        margin: const EdgeInsets.symmetric(vertical: 12),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(
+            color: Theme.of(context).colorScheme.outlineVariant.withValues(alpha: 0.5),
           ),
-          clipBehavior: Clip.antiAlias,
-          child: image,
         ),
+        clipBehavior: Clip.antiAlias,
+        child: image,
       ),
     );
   }
@@ -943,10 +940,7 @@ class _ImageFullScreenViewer extends StatelessWidget {
         minScale: 0.5,
         maxScale: 5.0,
         child: Center(
-          child: Hero(
-            tag: url,
-            child: image,
-          ),
+          child: image,
         ),
       ),
     );
