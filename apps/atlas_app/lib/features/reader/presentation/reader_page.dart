@@ -16,6 +16,7 @@ import '../../ai/data/ai_api_client.dart';
 import '../../ai/presentation/ai_panel.dart';
 import '../../documents/application/document_content_provider.dart';
 import '../../documents/data/document_repository.dart';
+import '../../library/application/library_controller.dart';
 import '../../html_export/application/html_export_service.dart';
 import '../application/reading_settings_controller.dart';
 import 'reader_markdown_view.dart';
@@ -126,6 +127,7 @@ class _ReaderPageState extends ConsumerState<ReaderPage> {
     await ref
         .read(documentRepositoryProvider)
         .saveProgress(id, offset, progress);
+    ref.read(libraryControllerProvider.notifier).refresh();
   }
 
   Future<void> _showToc(DocumentContent document) {

@@ -9,6 +9,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:receive_sharing_intent/receive_sharing_intent.dart';
 
 import '../../../app/routing/app_routes.dart';
+import '../../library/application/library_controller.dart';
 import '../data/document_repository.dart';
 
 final shareImportControllerProvider =
@@ -16,6 +17,7 @@ final shareImportControllerProvider =
       final controller = ShareImportController(
         repository: ref.read(documentRepositoryProvider),
         router: router,
+        ref: ref,
       );
       controller.start();
       ref.onDispose(controller.dispose);
@@ -23,10 +25,15 @@ final shareImportControllerProvider =
     });
 
 class ShareImportController {
-  ShareImportController({required this.repository, required this.router});
+  ShareImportController({
+    required this.repository,
+    required this.router,
+    required this.ref,
+  });
 
   final DocumentRepository repository;
   final GoRouter router;
+  final Ref ref;
   StreamSubscription<List<SharedMediaFile>>? _subscription;
   var _started = false;
 
@@ -63,6 +70,10 @@ class ShareImportController {
       }
       try {
         final document = await repository.importFile(file);
+        
+        // **IMPORT**: invalidate library so that the recent documents list reflects the new item
+        ref.read(libraryControllerProvider.notifier).refresh();
+        
         router.push(AppRoutes.readerPath(document.id));
       } on DocumentImportFailure {
         continue;
