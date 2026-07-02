@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:io';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
@@ -48,6 +49,7 @@ class ReaderMarkdownView extends StatelessWidget {
         styleSheet: styleSheet,
         settings: settings,
       ),
+      imageBuilder: (url, alt, title) => _buildImage(context, url, alt, title),
       plugins: ParserPluginRegistry()..register(const MermaidPlugin()),
       builderRegistry: BuilderRegistry()
         ..register('table', const _ReaderTableBuilder())
@@ -55,6 +57,55 @@ class ReaderMarkdownView extends StatelessWidget {
           'mermaid',
           _AtlasMermaidBuilder(compact: compact, useJsMermaid: useJsMermaid),
         ),
+    );
+  }
+
+  Widget _buildImage(
+    BuildContext context,
+    String url,
+    String? alt,
+    String? title,
+  ) {
+    Widget image;
+    if (url.startsWith('http://') || url.startsWith('https://')) {
+      image = Image.network(url, fit: BoxFit.contain);
+    } else if (url.startsWith('file://')) {
+      image = Image.file(
+        File(Uri.parse(url).toFilePath()),
+        fit: BoxFit.contain,
+      );
+    } else {
+      final file = File(url);
+      if (file.existsSync()) {
+        image = Image.file(file, fit: BoxFit.contain);
+      } else {
+        image = Image.network(url, fit: BoxFit.contain);
+      }
+    }
+
+    return GestureDetector(
+      onTap: () {
+        Navigator.of(context).push(
+          MaterialPageRoute(
+            builder: (_) => _ImageFullScreenViewer(url: url),
+          ),
+        );
+      },
+      child: Hero(
+        tag: url,
+        child: Container(
+          constraints: const BoxConstraints(maxHeight: 500, minWidth: double.infinity),
+          margin: const EdgeInsets.symmetric(vertical: 12),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(
+              color: Theme.of(context).colorScheme.outlineVariant.withValues(alpha: 0.5),
+            ),
+          ),
+          clipBehavior: Clip.antiAlias,
+          child: image,
+        ),
+      ),
     );
   }
 
@@ -329,8 +380,7 @@ class _ReaderCodeBlock extends StatelessWidget {
               ),
             ),
           ),
-          SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
+          Padding(
             padding: const EdgeInsets.only(bottom: 4),
             child: HighlightView(
               code,
@@ -497,6 +547,12 @@ class _MermaidJsDiagramState extends State<_MermaidJsDiagram> {
       ..addJavaScriptChannel(
         'AtlasMermaid',
         onMessageReceived: (message) {
+          if (message.message == 'CLICK') {
+            Navigator.of(context).push(MaterialPageRoute(
+              builder: (_) => _MermaidFullScreenViewer(code: widget.code),
+            ));
+            return;
+          }
           final nextHeight = double.tryParse(message.message);
           if (nextHeight == null || !mounted) return;
           setState(() {
@@ -521,10 +577,6 @@ class _MermaidJsDiagramState extends State<_MermaidJsDiagram> {
 
     return LayoutBuilder(
       builder: (context, constraints) {
-        final width = widget.compact
-            ? constraints.maxWidth
-            : math.max(constraints.maxWidth, 980.0);
-
         return Container(
           margin: EdgeInsets.symmetric(vertical: widget.compact ? 8 : 18),
           decoration: BoxDecoration(
@@ -535,13 +587,10 @@ class _MermaidJsDiagramState extends State<_MermaidJsDiagram> {
             ),
           ),
           clipBehavior: Clip.antiAlias,
-          child: SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            child: SizedBox(
-              width: width,
-              height: _height,
-              child: WebViewWidget(controller: _controller),
-            ),
+          child: SizedBox(
+            width: constraints.maxWidth,
+            height: _height,
+            child: WebViewWidget(controller: _controller),
           ),
         );
       },
@@ -571,7 +620,7 @@ class _MermaidJsDiagramState extends State<_MermaidJsDiagram> {
     }
     svg {
       display: block;
-      max-width: none;
+      max-width: 100%;
       height: auto;
     }
     .error {
@@ -592,6 +641,10 @@ class _MermaidJsDiagramState extends State<_MermaidJsDiagram> {
 
     const source = decodeURIComponent(escape(atob('$encodedCode')));
     const container = document.getElementById('container');
+
+    container.addEventListener('click', function() {
+      AtlasMermaid.postMessage('CLICK');
+    });
 
     function reportHeight() {
       const height = Math.ceil(document.documentElement.scrollHeight || document.body.scrollHeight || 280);
@@ -686,17 +739,13 @@ class _ReaderTableBuilder extends MarkdownWidgetBuilder {
             ),
             borderRadius: BorderRadius.circular(8),
           ),
-          child: SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
+          child: Padding(
             padding: const EdgeInsets.only(bottom: 4),
-            child: ConstrainedBox(
-              constraints: BoxConstraints(minWidth: constraints.maxWidth),
-              child: Table(
-                border: styleSheet.tableBorder,
-                defaultColumnWidth: const IntrinsicColumnWidth(),
-                defaultVerticalAlignment: TableCellVerticalAlignment.middle,
-                children: rows,
-              ),
+            child: Table(
+              border: styleSheet.tableBorder,
+              defaultColumnWidth: const FlexColumnWidth(),
+              defaultVerticalAlignment: TableCellVerticalAlignment.middle,
+              children: rows,
             ),
           ),
         ),
@@ -765,5 +814,137 @@ class _ReaderTableBuilder extends MarkdownWidgetBuilder {
       TableAlignment.right => Alignment.centerRight,
       _ => Alignment.centerLeft,
     };
+  }
+}
+
+class _MermaidFullScreenViewer extends StatefulWidget {
+  const _MermaidFullScreenViewer({required this.code});
+  final String code;
+  @override
+  State<_MermaidFullScreenViewer> createState() => _MermaidFullScreenViewerState();
+}
+
+class _MermaidFullScreenViewerState extends State<_MermaidFullScreenViewer> {
+  late final WebViewController _controller;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = WebViewController()
+      ..setJavaScriptMode(JavaScriptMode.unrestricted)
+      ..setBackgroundColor(Colors.black)
+      ..loadHtmlString(_html(widget.code, ThemeMode.dark));
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: Colors.black,
+      appBar: AppBar(
+        backgroundColor: Colors.black,
+        iconTheme: const IconThemeData(color: Colors.white),
+        elevation: 0,
+      ),
+      body: SafeArea(
+        child: WebViewWidget(controller: _controller),
+      ),
+    );
+  }
+
+  String _html(String code, ThemeMode themeMode) {
+    final encodedCode = base64Encode(utf8.encode(code));
+    final theme = themeMode == ThemeMode.dark ? 'dark' : 'default';
+    return '''
+<!doctype html>
+<html>
+<head>
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=5.0, user-scalable=yes" />
+  <style>
+    html, body {
+      margin: 0;
+      padding: 0;
+      background: #000;
+      color: #fff;
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    #container {
+      box-sizing: border-box;
+      width: 100%;
+      padding: 18px;
+    }
+    svg {
+      display: block;
+      max-width: none;
+      height: auto;
+      margin: auto;
+    }
+  </style>
+</head>
+<body>
+  <div id="container"></div>
+  <script type="module">
+    import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11.12.2/dist/mermaid.esm.min.mjs';
+    const source = decodeURIComponent(escape(atob('$encodedCode')));
+    const container = document.getElementById('container');
+    try {
+      mermaid.initialize({
+        startOnLoad: false,
+        theme: '$theme',
+        securityLevel: 'loose',
+        sequence: { mirrorActors: false, useMaxWidth: false },
+        flowchart: { useMaxWidth: false, htmlLabels: true, curve: 'basis' }
+      });
+      const id = 'atlas_mermaid_' + Math.random().toString(36).slice(2);
+      const result = await mermaid.render(id, source);
+      container.innerHTML = result.svg;
+    } catch (error) {}
+  </script>
+</body>
+</html>
+''';
+  }
+}
+
+class _ImageFullScreenViewer extends StatelessWidget {
+  const _ImageFullScreenViewer({required this.url});
+  final String url;
+
+  @override
+  Widget build(BuildContext context) {
+    Widget image;
+    if (url.startsWith('http://') || url.startsWith('https://')) {
+      image = Image.network(url);
+    } else if (url.startsWith('file://')) {
+      image = Image.file(File(Uri.parse(url).toFilePath()));
+    } else {
+      final file = File(url);
+      if (file.existsSync()) {
+        image = Image.file(file);
+      } else {
+        image = Image.network(url);
+      }
+    }
+
+    return Scaffold(
+      backgroundColor: Colors.black,
+      appBar: AppBar(
+        backgroundColor: Colors.black,
+        iconTheme: const IconThemeData(color: Colors.white),
+        elevation: 0,
+      ),
+      body: InteractiveViewer(
+        minScale: 0.5,
+        maxScale: 5.0,
+        child: Center(
+          child: Hero(
+            tag: url,
+            child: image,
+          ),
+        ),
+      ),
+    );
   }
 }
