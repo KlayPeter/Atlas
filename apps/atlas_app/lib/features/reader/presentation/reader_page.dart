@@ -252,7 +252,7 @@ class _ReaderPageState extends ConsumerState<ReaderPage> {
     return showModalBottomSheet<void>(
       context: context,
       showDragHandle: true,
-      builder: (context) => _ReadingSettingsSheet(settings: settings),
+      builder: (context) => const _ReadingSettingsSheet(),
     );
   }
 
@@ -445,12 +445,16 @@ class _ReaderScaffold extends StatelessWidget {
 }
 
 class _ReadingSettingsSheet extends ConsumerWidget {
-  const _ReadingSettingsSheet({required this.settings});
-
-  final ReadingSettings settings;
+  const _ReadingSettingsSheet();
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final settingsAsync = ref.watch(readingSettingsProvider);
+    final settings = settingsAsync.value;
+    if (settings == null) {
+      return const SizedBox.shrink();
+    }
+
     return SafeArea(
       child: Padding(
         padding: const EdgeInsets.all(AtlasSpacing.md),

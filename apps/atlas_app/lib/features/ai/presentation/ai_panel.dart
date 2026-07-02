@@ -122,9 +122,16 @@ class _AiPanelState extends ConsumerState<AiPanel> {
             const SizedBox(height: AtlasSpacing.md),
             if (_loading) const LinearProgressIndicator(),
             if (_error != null)
-              Text(
-                'AI 暂时不可用：$_error',
-                style: TextStyle(color: Theme.of(context).colorScheme.error),
+              Builder(
+                builder: (context) {
+                  final msg = _error.toString().startsWith('Exception: ') 
+                      ? _error.toString().substring(11) 
+                      : _error.toString();
+                  return Text(
+                    'AI 暂时不可用：$msg',
+                    style: TextStyle(color: Theme.of(context).colorScheme.error),
+                  );
+                },
               ),
             if (_result != null) _AiResultView(result: _result!),
             if (_history.isNotEmpty) ...[

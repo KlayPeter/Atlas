@@ -80,17 +80,26 @@ class AiApiClient {
     required String question,
   }) async* {
     final headers = await _getAiHeaders();
-    final response = await _dio.post<ResponseBody>(
-      '/v1/ai/ask',
-      data: {'question': question, 'context': context.toJson(), 'stream': true},
-      options: Options(
-        headers: {
-          ...headers,
-          'Accept': 'text/event-stream',
-        },
-        responseType: ResponseType.stream,
-      ),
-    );
+    Response<ResponseBody> response;
+    try {
+      response = await _dio.post<ResponseBody>(
+        '/v1/ai/ask',
+        data: {'question': question, 'context': context.toJson(), 'stream': true},
+        options: Options(
+          headers: {
+            ...headers,
+            'Accept': 'text/event-stream',
+          },
+          responseType: ResponseType.stream,
+        ),
+      );
+    } on DioException catch (e) {
+      if (e.type == DioExceptionType.connectionError ||
+          e.type == DioExceptionType.connectionTimeout) {
+        throw Exception('网络连接失败，请检查网络或后端配置。');
+      }
+      throw Exception('网络异常 (${e.response?.statusCode ?? '未知错误'})');
+    }
 
     final stream = response.data?.stream;
     if (stream == null) {
@@ -145,17 +154,25 @@ class AiApiClient {
     String path,
     Map<String, Object?> body,
   ) async {
-    final headers = await _getAiHeaders();
-    final response = await _dio.post<Map<String, Object?>>(
-      path,
-      data: body,
-      options: Options(headers: headers),
-    );
-    final data = response.data;
-    if (data == null || data['ok'] != true) {
-      throw Exception('AI 请求失败');
+    try {
+      final headers = await _getAiHeaders();
+      final response = await _dio.post<Map<String, Object?>>(
+        path,
+        data: body,
+        options: Options(headers: headers),
+      );
+      final data = response.data;
+      if (data == null || data['ok'] != true) {
+        throw Exception('AI 请求失败');
+      }
+      return data;
+    } on DioException catch (e) {
+      if (e.type == DioExceptionType.connectionError ||
+          e.type == DioExceptionType.connectionTimeout) {
+        throw Exception('网络连接失败，请检查网络或后端配置。');
+      }
+      throw Exception('网络异常 (${e.response?.statusCode ?? '未知错误'})');
     }
-    return data;
   }
 
   Future<Map<String, String>> _getAiHeaders() async {
@@ -185,7 +202,17 @@ class AiApiClient {
       return existing;
     }
 
-    final response = await _dio.post<Map<String, Object?>>('/v1/auth/device');
+    Response<Map<String, Object?>> response;
+    try {
+      response = await _dio.post<Map<String, Object?>>('/v1/auth/device');
+    } on DioException catch (e) {
+      if (e.type == DioExceptionType.connectionError ||
+          e.type == DioExceptionType.connectionTimeout) {
+        throw Exception('网络连接失败，请检查网络或后端配置。');
+      }
+      throw Exception('网络异常 (${e.response?.statusCode ?? '未知错误'})');
+    }
+    
     final payload = response.data?['data'] as Map<String, Object?>?;
     final token = payload?['token'] as String?;
     if (token == null) {

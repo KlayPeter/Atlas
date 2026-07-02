@@ -125,6 +125,10 @@ class _StudyViewState extends ConsumerState<StudyView> {
     }
 
     if (_error != null) {
+      final msg = _error.toString().startsWith('Exception: ') 
+          ? _error.toString().substring(11) 
+          : _error.toString();
+          
       return Padding(
         padding: const EdgeInsets.all(AtlasSpacing.lg),
         child: Center(
@@ -132,7 +136,7 @@ class _StudyViewState extends ConsumerState<StudyView> {
             mainAxisSize: MainAxisSize.min,
             children: [
               Text(
-                '生成题目失败\n$_error',
+                '生成题目失败\n$msg',
                 textAlign: TextAlign.center,
                 style: TextStyle(color: Theme.of(context).colorScheme.error),
               ),
