@@ -7,27 +7,32 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../../../domain/ai/study_models.dart';
 import '../application/ai_models.dart';
 
+const defaultAtlasBffUrl = String.fromEnvironment(
+  'ATLAS_BFF_URL',
+  defaultValue: 'http://127.0.0.1:8787',
+);
+
 final aiApiClientProvider = Provider<AiApiClient>((ref) {
   return AiApiClient(
     Dio(
       BaseOptions(
-        baseUrl: const String.fromEnvironment(
-          'ATLAS_BFF_URL',
-          defaultValue: 'http://127.0.0.1:8787',
-        ),
+        baseUrl: defaultAtlasBffUrl,
         connectTimeout: const Duration(seconds: 8),
         receiveTimeout: const Duration(seconds: 45),
       ),
     ),
+    defaultBffUrl: defaultAtlasBffUrl,
   );
 });
 
 class AiApiClient {
-  AiApiClient(this._dio);
+  AiApiClient(this._dio, {required this.defaultBffUrl});
 
   static const _tokenKey = 'atlas.auth.deviceToken';
+  static const _bffUrlKey = 'ai_settings_bff_url';
 
   final Dio _dio;
+  final String defaultBffUrl;
 
   Future<AiResult> explain({
     required AiDocumentContext context,
@@ -79,10 +84,11 @@ class AiApiClient {
     required AiDocumentContext context,
     required String question,
   }) async* {
+    final client = await _createClient();
     final headers = await _getAiHeaders();
     Response<ResponseBody> response;
     try {
-      response = await _dio.post<ResponseBody>(
+      response = await client.post<ResponseBody>(
         '/v1/ai/ask',
         data: {
           'question': question,
@@ -152,8 +158,9 @@ class AiApiClient {
     Map<String, Object?> body,
   ) async {
     try {
+      final client = await _createClient();
       final headers = await _getAiHeaders();
-      final response = await _dio.post<Map<String, Object?>>(
+      final response = await client.post<Map<String, Object?>>(
         path,
         data: body,
         options: Options(headers: headers),
@@ -193,7 +200,8 @@ class AiApiClient {
 
     Response<Map<String, Object?>> response;
     try {
-      response = await _dio.post<Map<String, Object?>>('/v1/auth/device');
+      final client = await _createClient();
+      response = await client.post<Map<String, Object?>>('/v1/auth/device');
     } on DioException catch (e) {
       throw Exception(_describeDioError(e));
     }
@@ -226,6 +234,175 @@ class AiApiClient {
 
     return '网络异常 (${error.response?.statusCode ?? '未知错误'})';
   }
+
+  Future<AiConnectivityReport> diagnoseConnectivity() async {
+    final bffUrl = await _getBffUrl();
+    final headers = await _getAiHeaders();
+    final client = _clientForBaseUrl(bffUrl);
+    final steps = <AiConnectivityStep>[];
+
+    try {
+      final response = await client.get<Map<String, Object?>>('/health');
+      final status = response.data?['data'];
+      steps.add(
+        AiConnectivityStep(
+          name: 'Atlas BFF /health',
+          ok: true,
+          detail:
+              'HTTP ${response.statusCode} ${status is Map ? (status['status'] ?? '') : ''}'
+                  .trim(),
+        ),
+      );
+    } on DioException catch (error) {
+      steps.add(
+        AiConnectivityStep(
+          name: 'Atlas BFF /health',
+          ok: false,
+          detail: _describeConnectivityFailure(error, bffUrl: bffUrl),
+        ),
+      );
+      return AiConnectivityReport(bffUrl: bffUrl, steps: steps);
+    }
+
+    String token;
+    try {
+      final response = await client.post<Map<String, Object?>>(
+        '/v1/auth/device',
+      );
+      final payload = response.data?['data'] as Map<String, Object?>?;
+      token = payload?['token'] as String? ?? '';
+      if (token.isEmpty) {
+        throw Exception('空 token');
+      }
+      steps.add(
+        AiConnectivityStep(
+          name: 'Atlas BFF /v1/auth/device',
+          ok: true,
+          detail: 'HTTP ${response.statusCode}，成功获取设备 token',
+        ),
+      );
+    } catch (error) {
+      final detail = error is DioException
+          ? _describeConnectivityFailure(error, bffUrl: bffUrl)
+          : '无法获取设备 token: $error';
+      steps.add(
+        AiConnectivityStep(
+          name: 'Atlas BFF /v1/auth/device',
+          ok: false,
+          detail: detail,
+        ),
+      );
+      return AiConnectivityReport(bffUrl: bffUrl, steps: steps);
+    }
+
+    try {
+      final response = await client.post<Map<String, Object?>>(
+        '/v1/ai/explain',
+        data: {
+          'selectedText': '连通性测试',
+          'context': {
+            'documentId': 'connectivity_check',
+            'title': 'Atlas Connectivity Check',
+            'outline': '- health\n- auth\n- explain',
+            'excerpt': 'This is a connectivity test for Atlas AI services.',
+          },
+        },
+        options: Options(
+          headers: {...headers, 'Authorization': 'Bearer $token'},
+        ),
+      );
+      final data = response.data?['data'] as Map<String, Object?>?;
+      final explanation = data?['explanation'] as String? ?? '';
+      steps.add(
+        AiConnectivityStep(
+          name: 'Atlas BFF /v1/ai/explain',
+          ok: true,
+          detail: explanation.isEmpty
+              ? 'HTTP ${response.statusCode}，请求已通但返回为空'
+              : 'HTTP ${response.statusCode}，AI 返回 ${explanation.length} 字',
+        ),
+      );
+    } on DioException catch (error) {
+      steps.add(
+        AiConnectivityStep(
+          name: 'Atlas BFF /v1/ai/explain',
+          ok: false,
+          detail: _describeConnectivityFailure(error, bffUrl: bffUrl),
+        ),
+      );
+    }
+
+    return AiConnectivityReport(bffUrl: bffUrl, steps: steps);
+  }
+
+  Future<Dio> _createClient() async {
+    final bffUrl = await _getBffUrl();
+    return _clientForBaseUrl(bffUrl);
+  }
+
+  Dio _clientForBaseUrl(String baseUrl) {
+    return Dio(
+      BaseOptions(
+        baseUrl: baseUrl,
+        connectTimeout: _dio.options.connectTimeout,
+        receiveTimeout: _dio.options.receiveTimeout,
+      ),
+    );
+  }
+
+  Future<String> _getBffUrl() async {
+    final prefs = await SharedPreferences.getInstance();
+    final configured = prefs.getString(_bffUrlKey)?.trim();
+    if (configured != null && configured.isNotEmpty) {
+      return configured;
+    }
+    return defaultBffUrl;
+  }
+
+  String _describeConnectivityFailure(
+    DioException error, {
+    required String bffUrl,
+  }) {
+    final baseMessage = _describeDioError(error);
+    if ((error.type == DioExceptionType.connectionError ||
+            error.type == DioExceptionType.connectionTimeout) &&
+        bffUrl.contains('127.0.0.1')) {
+      return '$baseMessage\n如果当前运行在 Android 真机，`127.0.0.1` 指向手机自身，不是你的 Mac。可使用 `adb reverse tcp:8787 tcp:8787`，或把 Atlas BFF URL 改成电脑可访问的地址。';
+    }
+    return baseMessage;
+  }
+}
+
+class AiConnectivityReport {
+  const AiConnectivityReport({required this.bffUrl, required this.steps});
+
+  final String bffUrl;
+  final List<AiConnectivityStep> steps;
+
+  bool get ok => steps.every((step) => step.ok);
+
+  String format() {
+    final buffer = StringBuffer('Atlas BFF URL: $bffUrl\n');
+    for (final step in steps) {
+      buffer
+        ..writeln()
+        ..writeln('${step.ok ? '[OK]' : '[FAIL]'} ${step.name}')
+        ..writeln(step.detail);
+    }
+    return buffer.toString().trimRight();
+  }
+}
+
+class AiConnectivityStep {
+  const AiConnectivityStep({
+    required this.name,
+    required this.ok,
+    required this.detail,
+  });
+
+  final String name;
+  final bool ok;
+  final String detail;
 }
 
 Map<String, String> buildAiProviderHeaders({

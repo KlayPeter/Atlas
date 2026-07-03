@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../app/theme/app_theme.dart';
+import '../../ai/data/ai_api_client.dart';
 import '../../reader/application/reading_settings_controller.dart';
 import '../application/ai_settings_controller.dart';
 
@@ -108,8 +109,10 @@ class _AiSettingsSectionState extends ConsumerState<_AiSettingsSection> {
   late final TextEditingController _apiKeyController;
   late final TextEditingController _baseUrlController;
   late final TextEditingController _modelNameController;
-  
+  late final TextEditingController _bffUrlController;
+
   AiSettings? _initialSettings;
+  bool _testing = false;
 
   @override
   void initState() {
@@ -117,6 +120,7 @@ class _AiSettingsSectionState extends ConsumerState<_AiSettingsSection> {
     _apiKeyController = TextEditingController();
     _baseUrlController = TextEditingController();
     _modelNameController = TextEditingController();
+    _bffUrlController = TextEditingController();
   }
 
   @override
@@ -124,20 +128,65 @@ class _AiSettingsSectionState extends ConsumerState<_AiSettingsSection> {
     _apiKeyController.dispose();
     _baseUrlController.dispose();
     _modelNameController.dispose();
+    _bffUrlController.dispose();
     super.dispose();
   }
 
-  void _saveSettings() {
-    ref.read(aiSettingsProvider.notifier).updateSettings(
+  Future<void> _saveSettings() async {
+    await ref
+        .read(aiSettingsProvider.notifier)
+        .updateSettings(
           AiSettings(
             apiKey: _apiKeyController.text.trim(),
             baseUrl: _baseUrlController.text.trim(),
             modelName: _modelNameController.text.trim(),
+            bffUrl: _bffUrlController.text.trim(),
           ),
         );
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('已保存 AI 模型配置')),
-    );
+    if (!mounted) return;
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(const SnackBar(content: Text('已保存 AI 配置')));
+  }
+
+  Future<void> _runConnectivityTest() async {
+    await _saveSettings();
+    if (!mounted) return;
+
+    setState(() {
+      _testing = true;
+    });
+
+    try {
+      final report = await ref.read(aiApiClientProvider).diagnoseConnectivity();
+      if (!mounted) return;
+      await showDialog<void>(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: Text(report.ok ? 'AI 连通性正常' : 'AI 连通性检查失败'),
+          content: SingleChildScrollView(
+            child: SelectableText(report.format()),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text('关闭'),
+            ),
+          ],
+        ),
+      );
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('连通性测试失败：$error')));
+    } finally {
+      if (mounted) {
+        setState(() {
+          _testing = false;
+        });
+      }
+    }
   }
 
   @override
@@ -153,10 +202,23 @@ class _AiSettingsSectionState extends ConsumerState<_AiSettingsSection> {
           _apiKeyController.text = settings.apiKey;
           _baseUrlController.text = settings.baseUrl;
           _modelNameController.text = settings.modelName;
+          _bffUrlController.text = settings.bffUrl;
         }
 
         return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            TextField(
+              controller: _bffUrlController,
+              decoration: InputDecoration(
+                labelText: 'Atlas BFF URL',
+                hintText: defaultAtlasBffUrl,
+                border: const OutlineInputBorder(),
+                helperText:
+                    '真机不要用 127.0.0.1。Android 模拟器可用 10.0.2.2；USB 真机调试可先执行 adb reverse。',
+              ),
+            ),
+            const SizedBox(height: AtlasSpacing.sm),
             TextField(
               controller: _apiKeyController,
               decoration: const InputDecoration(
@@ -190,6 +252,21 @@ class _AiSettingsSectionState extends ConsumerState<_AiSettingsSection> {
               child: FilledButton(
                 onPressed: _saveSettings,
                 child: const Text('保存配置'),
+              ),
+            ),
+            const SizedBox(height: AtlasSpacing.sm),
+            SizedBox(
+              width: double.infinity,
+              child: OutlinedButton.icon(
+                onPressed: _testing ? null : _runConnectivityTest,
+                icon: _testing
+                    ? const SizedBox(
+                        width: 18,
+                        height: 18,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Icon(Icons.network_check),
+                label: Text(_testing ? '检测中...' : '测试 Atlas BFF / AI 连通性'),
               ),
             ),
           ],

@@ -2,6 +2,13 @@ import 'package:atlas_app/features/ai/data/ai_api_client.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
+  test(
+    'defaultAtlasBffUrl stays on localhost for simulator or adb reverse flows',
+    () {
+      expect(defaultAtlasBffUrl, 'http://127.0.0.1:8787');
+    },
+  );
+
   test('buildAiProviderHeaders omits placeholder provider settings', () {
     final headers = buildAiProviderHeaders(
       token: 'device-token',
