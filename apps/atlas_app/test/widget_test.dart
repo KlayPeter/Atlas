@@ -32,5 +32,6 @@ void main() {
     expect(find.text('设置'), findsOneWidget);
     expect(find.text('阅读外观'), findsOneWidget);
     expect(find.text('阅读排版'), findsOneWidget);
+    expect(find.text('测试 Atlas BFF / AI 连通性'), findsNothing);
   });
 }

@@ -89,18 +89,21 @@ class ReaderMarkdownView extends StatelessWidget {
     return GestureDetector(
       onTap: () {
         Navigator.of(context).push(
-          MaterialPageRoute(
-            builder: (_) => _ImageFullScreenViewer(url: url),
-          ),
+          MaterialPageRoute(builder: (_) => _ImageFullScreenViewer(url: url)),
         );
       },
       child: Container(
-        constraints: const BoxConstraints(maxHeight: 500, minWidth: double.infinity),
+        constraints: const BoxConstraints(
+          maxHeight: 500,
+          minWidth: double.infinity,
+        ),
         margin: const EdgeInsets.symmetric(vertical: 12),
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(8),
           border: Border.all(
-            color: Theme.of(context).colorScheme.outlineVariant.withValues(alpha: 0.5),
+            color: Theme.of(
+              context,
+            ).colorScheme.outlineVariant.withValues(alpha: 0.5),
           ),
         ),
         clipBehavior: Clip.antiAlias,
@@ -140,7 +143,7 @@ class ReaderMarkdownView extends StatelessWidget {
                 textValue?.selection.textInside(textValue.text).trim() ?? '';
             final anchor =
                 selectableRegionState.contextMenuAnchors.primaryAnchor;
-            selectableRegionState.clearSelection();
+            innerState?.hideToolbar();
             if (selectedText.isNotEmpty) {
               onAiExplain?.call(selectedText, anchor);
             }
@@ -397,7 +400,10 @@ class _ReaderCodeBlock extends StatelessWidget {
 
   String _normalizeLanguage(String? value) {
     final language = value?.trim().toLowerCase();
-    if (language == null || language.isEmpty || language == 'text' || language == 'txt') {
+    if (language == null ||
+        language.isEmpty ||
+        language == 'text' ||
+        language == 'txt') {
       return 'plaintext';
     }
 
@@ -549,12 +555,12 @@ class _MermaidJsDiagramState extends State<_MermaidJsDiagram> {
         onMessageReceived: (message) {
           if (message.message == 'CLICK') {
             final isDark = Theme.of(context).brightness == Brightness.dark;
-            Navigator.of(context).push(MaterialPageRoute(
-              builder: (_) => _MermaidFullScreenViewer(
-                code: widget.code,
-                isDark: isDark,
+            Navigator.of(context).push(
+              MaterialPageRoute(
+                builder: (_) =>
+                    _MermaidFullScreenViewer(code: widget.code, isDark: isDark),
               ),
-            ));
+            );
             return;
           }
           final nextHeight = double.tryParse(message.message);
@@ -830,7 +836,8 @@ class _MermaidFullScreenViewer extends StatefulWidget {
   final String code;
   final bool isDark;
   @override
-  State<_MermaidFullScreenViewer> createState() => _MermaidFullScreenViewerState();
+  State<_MermaidFullScreenViewer> createState() =>
+      _MermaidFullScreenViewerState();
 }
 
 class _MermaidFullScreenViewerState extends State<_MermaidFullScreenViewer> {
@@ -855,9 +862,7 @@ class _MermaidFullScreenViewerState extends State<_MermaidFullScreenViewer> {
         iconTheme: IconThemeData(color: scheme.onSurface),
         elevation: 0,
       ),
-      body: SafeArea(
-        child: WebViewWidget(controller: _controller),
-      ),
+      body: SafeArea(child: WebViewWidget(controller: _controller)),
     );
   }
 
@@ -946,9 +951,7 @@ class _ImageFullScreenViewer extends StatelessWidget {
       body: InteractiveViewer(
         minScale: 0.5,
         maxScale: 5.0,
-        child: Center(
-          child: image,
-        ),
+        child: Center(child: image),
       ),
     );
   }
@@ -963,31 +966,32 @@ class _AtlasHeaderBuilder extends MarkdownWidgetBuilder {
   bool canBuild(MarkdownNode node) => _delegate.canBuild(node);
 
   @override
-  Widget build(MarkdownNode node, MarkdownStyleSheet styleSheet, MarkdownRenderContext context) {
+  Widget build(
+    MarkdownNode node,
+    MarkdownStyleSheet styleSheet,
+    MarkdownRenderContext context,
+  ) {
     final headerNode = node as HeaderNode;
     final widget = _delegate.build(node, styleSheet, context);
     if (headerKeys == null) return widget;
 
-    // Remove inline markdown syntax from the header node's content, 
+    // Remove inline markdown syntax from the header node's content,
     // to match how DocumentSection.title is generated.
     final title = headerNode.content
         .replaceAll(RegExp(r'[`*_~\[\]()>#-]'), '')
         .replaceAll(RegExp(r'\s+'), ' ')
         .trim();
     final keyString = '${headerNode.level}:$title';
-    
+
     // Create a new GlobalKey for this header
     final headerKey = GlobalKey();
-    
+
     // Add it to the map
     if (!headerKeys!.containsKey(keyString)) {
       headerKeys![keyString] = [];
     }
     headerKeys![keyString]!.add(headerKey);
 
-    return Container(
-      key: headerKey,
-      child: widget,
-    );
+    return Container(key: headerKey, child: widget);
   }
 }

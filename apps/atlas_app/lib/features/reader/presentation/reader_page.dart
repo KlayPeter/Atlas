@@ -125,10 +125,10 @@ class _ReaderPageState extends ConsumerState<ReaderPage> {
         .clamp(0, math.max(0, max))
         .toDouble();
     final progress = max <= 0 ? 0.0 : offset / max;
-    
+
     final repo = ref.read(documentRepositoryProvider);
     final libNotifier = ref.read(libraryControllerProvider.notifier);
-    
+
     await repo.saveProgress(id, offset, progress);
     libNotifier.refresh();
   }
@@ -172,16 +172,17 @@ class _ReaderPageState extends ConsumerState<ReaderPage> {
     if (!_scrollController.hasClients || document.rawText.isEmpty) {
       return;
     }
-    
+
     final keyString = '${section.level}:${section.title}';
     final keys = _headerKeys[keyString];
-    
+
     if (keys != null && keys.isNotEmpty) {
       // Find the best matching key based on order (rough approximation)
       // For exact matching, we would need the actual index, but since DocumentSection
       // doesn't have an index, we just pick the first one for now, or we can find
       // the closest offset.
-      final targetKey = keys.first; // usually the first one works for most documents
+      final targetKey =
+          keys.first; // usually the first one works for most documents
       final context = targetKey.currentContext;
       if (context != null) {
         Scrollable.ensureVisible(
@@ -540,7 +541,7 @@ class _InlineExplanationOverlay extends StatelessWidget {
   Widget build(BuildContext context) {
     final size = MediaQuery.sizeOf(context);
     final width = math.min(380.0, size.width - 24);
-    const height = 260.0;
+    final height = math.min(360.0, size.height - 48);
     final left = (anchor.dx - width / 2).clamp(12.0, size.width - width - 12);
     final preferBelow = anchor.dy + height + 16 < size.height;
     final top = preferBelow
@@ -558,7 +559,7 @@ class _InlineExplanationOverlay extends StatelessWidget {
             borderRadius: BorderRadius.circular(10),
             color: Theme.of(context).colorScheme.surface,
             child: ConstrainedBox(
-              constraints: const BoxConstraints(maxHeight: height),
+              constraints: BoxConstraints(maxHeight: height),
               child: Padding(
                 padding: const EdgeInsets.all(AtlasSpacing.md),
                 child: Column(
@@ -569,7 +570,7 @@ class _InlineExplanationOverlay extends StatelessWidget {
                       children: [
                         Expanded(
                           child: Text(
-                            selectedText,
+                            'AI 解释',
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                             style: Theme.of(context).textTheme.titleSmall,
@@ -582,7 +583,27 @@ class _InlineExplanationOverlay extends StatelessWidget {
                         ),
                       ],
                     ),
-                    const SizedBox(height: AtlasSpacing.xs),
+                    Container(
+                      width: double.infinity,
+                      margin: const EdgeInsets.only(top: AtlasSpacing.xs),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: AtlasSpacing.sm,
+                        vertical: AtlasSpacing.xs,
+                      ),
+                      decoration: BoxDecoration(
+                        color: Theme.of(
+                          context,
+                        ).colorScheme.surfaceContainerHighest,
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Text(
+                        selectedText,
+                        maxLines: 3,
+                        overflow: TextOverflow.ellipsis,
+                        style: Theme.of(context).textTheme.bodyMedium,
+                      ),
+                    ),
+                    const SizedBox(height: AtlasSpacing.sm),
                     Flexible(
                       child: FutureBuilder<AiResult>(
                         future: result,
@@ -600,10 +621,23 @@ class _InlineExplanationOverlay extends StatelessWidget {
                             final message = snapshot.error
                                 .toString()
                                 .replaceFirst('Exception: ', '');
-                            return Text(
-                              'AI 暂时不可用：$message',
-                              style: TextStyle(
-                                color: Theme.of(context).colorScheme.error,
+                            return DecoratedBox(
+                              decoration: BoxDecoration(
+                                color: Theme.of(
+                                  context,
+                                ).colorScheme.errorContainer,
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              child: Padding(
+                                padding: const EdgeInsets.all(AtlasSpacing.sm),
+                                child: Text(
+                                  '$message\n\n请到设置里的 AI 模型配置检查 Atlas BFF 地址、API Key、Base URL 和模型名称。',
+                                  style: TextStyle(
+                                    color: Theme.of(
+                                      context,
+                                    ).colorScheme.onErrorContainer,
+                                  ),
+                                ),
                               ),
                             );
                           }
@@ -636,7 +670,8 @@ class _ReadingSettingsSheet extends ConsumerStatefulWidget {
   const _ReadingSettingsSheet();
 
   @override
-  ConsumerState<_ReadingSettingsSheet> createState() => _ReadingSettingsSheetState();
+  ConsumerState<_ReadingSettingsSheet> createState() =>
+      _ReadingSettingsSheetState();
 }
 
 class _ReadingSettingsSheetState extends ConsumerState<_ReadingSettingsSheet> {
@@ -671,10 +706,14 @@ class _ReadingSettingsSheetState extends ConsumerState<_ReadingSettingsSheet> {
               max: 24,
               divisions: 16,
               onChanged: (value) {
-                setState(() => _localSettings = settings.copyWith(fontSize: value));
+                setState(
+                  () => _localSettings = settings.copyWith(fontSize: value),
+                );
               },
               onChangeEnd: (value) {
-                ref.read(readingSettingsProvider.notifier).updateSettings(settings.copyWith(fontSize: value));
+                ref
+                    .read(readingSettingsProvider.notifier)
+                    .updateSettings(settings.copyWith(fontSize: value));
               },
             ),
             Text('行距 ${settings.lineHeight.toStringAsFixed(2)}'),
@@ -684,10 +723,14 @@ class _ReadingSettingsSheetState extends ConsumerState<_ReadingSettingsSheet> {
               max: 2.1,
               divisions: 17,
               onChanged: (value) {
-                setState(() => _localSettings = settings.copyWith(lineHeight: value));
+                setState(
+                  () => _localSettings = settings.copyWith(lineHeight: value),
+                );
               },
               onChangeEnd: (value) {
-                ref.read(readingSettingsProvider.notifier).updateSettings(settings.copyWith(lineHeight: value));
+                ref
+                    .read(readingSettingsProvider.notifier)
+                    .updateSettings(settings.copyWith(lineHeight: value));
               },
             ),
             Text('页边距 ${settings.pagePadding.round()}'),
@@ -697,10 +740,14 @@ class _ReadingSettingsSheetState extends ConsumerState<_ReadingSettingsSheet> {
               max: 36,
               divisions: 12,
               onChanged: (value) {
-                setState(() => _localSettings = settings.copyWith(pagePadding: value));
+                setState(
+                  () => _localSettings = settings.copyWith(pagePadding: value),
+                );
               },
               onChangeEnd: (value) {
-                ref.read(readingSettingsProvider.notifier).updateSettings(settings.copyWith(pagePadding: value));
+                ref
+                    .read(readingSettingsProvider.notifier)
+                    .updateSettings(settings.copyWith(pagePadding: value));
               },
             ),
             SwitchListTile(
@@ -708,8 +755,12 @@ class _ReadingSettingsSheetState extends ConsumerState<_ReadingSettingsSheet> {
               title: const Text('护眼纸色'),
               value: settings.eyeCare,
               onChanged: (value) {
-                setState(() => _localSettings = settings.copyWith(eyeCare: value));
-                ref.read(readingSettingsProvider.notifier).updateSettings(settings.copyWith(eyeCare: value));
+                setState(
+                  () => _localSettings = settings.copyWith(eyeCare: value),
+                );
+                ref
+                    .read(readingSettingsProvider.notifier)
+                    .updateSettings(settings.copyWith(eyeCare: value));
               },
             ),
           ],

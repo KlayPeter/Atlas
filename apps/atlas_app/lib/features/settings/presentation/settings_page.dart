@@ -112,7 +112,6 @@ class _AiSettingsSectionState extends ConsumerState<_AiSettingsSection> {
   late final TextEditingController _bffUrlController;
 
   AiSettings? _initialSettings;
-  bool _testing = false;
 
   @override
   void initState() {
@@ -149,46 +148,6 @@ class _AiSettingsSectionState extends ConsumerState<_AiSettingsSection> {
     ).showSnackBar(const SnackBar(content: Text('已保存 AI 配置')));
   }
 
-  Future<void> _runConnectivityTest() async {
-    await _saveSettings();
-    if (!mounted) return;
-
-    setState(() {
-      _testing = true;
-    });
-
-    try {
-      final report = await ref.read(aiApiClientProvider).diagnoseConnectivity();
-      if (!mounted) return;
-      await showDialog<void>(
-        context: context,
-        builder: (context) => AlertDialog(
-          title: Text(report.ok ? 'AI 连通性正常' : 'AI 连通性检查失败'),
-          content: SingleChildScrollView(
-            child: SelectableText(report.format()),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(),
-              child: const Text('关闭'),
-            ),
-          ],
-        ),
-      );
-    } catch (error) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('连通性测试失败：$error')));
-    } finally {
-      if (mounted) {
-        setState(() {
-          _testing = false;
-        });
-      }
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
     final aiSettingsState = ref.watch(aiSettingsProvider);
@@ -211,18 +170,17 @@ class _AiSettingsSectionState extends ConsumerState<_AiSettingsSection> {
             TextField(
               controller: _bffUrlController,
               decoration: InputDecoration(
-                labelText: 'Atlas BFF URL',
+                labelText: 'Atlas BFF 地址',
                 hintText: defaultAtlasBffUrl,
                 border: const OutlineInputBorder(),
-                helperText:
-                    '真机不要用 127.0.0.1。Android 模拟器可用 10.0.2.2；USB 真机调试可先执行 adb reverse。',
+                helperText: '用于连接 Atlas 后端；手机上请填写电脑可访问的地址。',
               ),
             ),
             const SizedBox(height: AtlasSpacing.sm),
             TextField(
               controller: _apiKeyController,
               decoration: const InputDecoration(
-                labelText: 'API Key (留空使用后端默认配置)',
+                labelText: 'API Key',
                 hintText: 'sk-...',
                 border: OutlineInputBorder(),
               ),
@@ -252,21 +210,6 @@ class _AiSettingsSectionState extends ConsumerState<_AiSettingsSection> {
               child: FilledButton(
                 onPressed: _saveSettings,
                 child: const Text('保存配置'),
-              ),
-            ),
-            const SizedBox(height: AtlasSpacing.sm),
-            SizedBox(
-              width: double.infinity,
-              child: OutlinedButton.icon(
-                onPressed: _testing ? null : _runConnectivityTest,
-                icon: _testing
-                    ? const SizedBox(
-                        width: 18,
-                        height: 18,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      )
-                    : const Icon(Icons.network_check),
-                label: Text(_testing ? '检测中...' : '测试 Atlas BFF / AI 连通性'),
               ),
             ),
           ],

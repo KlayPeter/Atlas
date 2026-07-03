@@ -8,7 +8,7 @@ class AiSettings {
   final String bffUrl;
 
   const AiSettings({
-    this.apiKey = 'xxx',
+    this.apiKey = '',
     this.baseUrl = 'https://api.deepseek.com/v1',
     this.modelName = 'deepseek-v4-pro',
     this.bffUrl = '',
@@ -44,7 +44,7 @@ class AiSettingsController extends AsyncNotifier<AiSettings> {
     }
 
     return AiSettings(
-      apiKey: getPref(_keyApiKey, 'xxx'),
+      apiKey: getPref(_keyApiKey, ''),
       baseUrl: getPref(_keyBaseUrl, 'https://api.deepseek.com/v1'),
       modelName: getPref(_keyModelName, 'deepseek-v4-pro'),
       bffUrl: prefs.getString(_keyBffUrl) ?? '',

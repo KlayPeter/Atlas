@@ -2,7 +2,7 @@ import { describe, expect, test } from 'bun:test';
 
 import { createApp } from './app';
 import { resetAiGuardForTests } from './middleware/ai_guard';
-import { explainPrompt } from './modules/ai/prompts';
+import { explainPrompt, htmlEnhancePrompt } from './modules/ai/prompts';
 
 describe('atlas bff', () => {
   const explainBody = {
@@ -44,7 +44,7 @@ describe('atlas bff', () => {
     expect(body.error.code).toBe('UNAUTHORIZED');
   });
 
-  test('returns mock explain response with a device token', async () => {
+  test('returns configuration error when ai provider is missing', async () => {
     resetAiGuardForTests();
     const app = createApp();
     const token = await deviceToken(app);
@@ -59,13 +59,13 @@ describe('atlas bff', () => {
     });
     const body = await response.json();
 
-    expect(response.status).toBe(200);
-    expect(body.ok).toBe(true);
-    expect(body.data.explanation).toContain('local-first');
-    expect(body.data.explanation).toContain('**是什么**');
+    expect(response.status).toBe(503);
+    expect(body.ok).toBe(false);
+    expect(body.error.code).toBe('AI_PROVIDER_NOT_CONFIGURED');
+    expect(body.error.message).toContain('AI 未配置');
   });
 
-  test('ignores placeholder provider headers and still falls back to mock', async () => {
+  test('rejects placeholder provider headers instead of returning mock content', async () => {
     resetAiGuardForTests();
     const app = createApp();
     const token = await deviceToken(app);
@@ -83,20 +83,27 @@ describe('atlas bff', () => {
     });
     const body = await response.json();
 
-    expect(response.status).toBe(200);
-    expect(body.ok).toBe(true);
-    expect(body.data.explanation).toContain('local-first');
-    expect(body.data.explanation).toContain('**是什么**');
+    expect(response.status).toBe(503);
+    expect(body.ok).toBe(false);
+    expect(body.error.code).toBe('AI_PROVIDER_NOT_CONFIGURED');
   });
 
-  test('explain prompt stays short-form markdown for inline popovers', () => {
+  test('explain prompt focuses on selected term or sentence meaning', () => {
     const prompt = explainPrompt(explainBody);
 
     expect(prompt).toContain('Markdown');
-    expect(prompt).toContain('不超过 120 字');
-    expect(prompt).toContain('**是什么**');
-    expect(prompt).toContain('**在本文里**');
-    expect(prompt).toContain('**怎么做**');
+    expect(prompt).toContain('名词、术语或短语');
+    expect(prompt).toContain('一句话');
+    expect(prompt).toContain('不使用固定编号模板');
+    expect(prompt).not.toContain('**怎么做**');
+  });
+
+  test('html enhance prompt supports summary and original preview modes', () => {
+    const summaryPrompt = htmlEnhancePrompt({ ...explainBody, mode: 'summary' });
+    const originalPrompt = htmlEnhancePrompt({ ...explainBody, mode: 'original' });
+
+    expect(summaryPrompt).toContain('总结全文');
+    expect(originalPrompt).toContain('不要改写原文主体');
   });
 
   test('rejects oversized ai request bodies', async () => {

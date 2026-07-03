@@ -5,6 +5,8 @@ import 'package:webview_flutter/webview_flutter.dart';
 
 import '../../../app/theme/app_theme.dart';
 import '../../../domain/document/document_content.dart';
+import '../../ai/application/ai_models.dart';
+import '../../ai/data/ai_api_client.dart';
 import '../../documents/application/document_content_provider.dart';
 import '../application/html_export_service.dart';
 
@@ -20,6 +22,9 @@ class HtmlPreviewPage extends ConsumerStatefulWidget {
 class _HtmlPreviewPageState extends ConsumerState<HtmlPreviewPage> {
   WebViewController? _controller;
   String? _filePath;
+  _HtmlPreviewMode? _mode;
+  bool _generating = false;
+  String? _errorMessage;
 
   @override
   Widget build(BuildContext context) {
@@ -49,10 +54,17 @@ class _HtmlPreviewPageState extends ConsumerState<HtmlPreviewPage> {
           if (content == null) {
             return const _HtmlPreviewError(message: '找不到文档');
           }
-          _ensureController(content);
           final controller = _controller;
-          if (controller == null) {
+          if (_generating) {
             return const Center(child: CircularProgressIndicator());
+          }
+          if (_errorMessage != null) {
+            return _HtmlPreviewError(message: _errorMessage!);
+          }
+          if (_mode == null || controller == null) {
+            return _HtmlPreviewModePicker(
+              onSelect: (mode) => _generatePreview(content, mode),
+            );
           }
           return WebViewWidget(controller: controller);
         },
@@ -60,21 +72,85 @@ class _HtmlPreviewPageState extends ConsumerState<HtmlPreviewPage> {
     );
   }
 
-  Future<void> _ensureController(DocumentContent content) async {
-    if (_controller != null) {
-      return;
-    }
-    final file = await ref.read(htmlExportServiceProvider).writeHtml(content);
-    if (!mounted) {
-      return;
-    }
-    final controller = WebViewController()
-      ..setJavaScriptMode(JavaScriptMode.disabled)
-      ..loadFile(file.path);
+  Future<void> _generatePreview(
+    DocumentContent content,
+    _HtmlPreviewMode mode,
+  ) async {
     setState(() {
-      _filePath = file.path;
-      _controller = controller;
+      _mode = mode;
+      _generating = true;
+      _errorMessage = null;
+      _controller = null;
+      _filePath = null;
     });
+
+    try {
+      final enhance = await ref
+          .read(aiApiClientProvider)
+          .enhanceHtml(
+            context: AiDocumentContext.fromDocument(content),
+            mode: mode.apiValue,
+          );
+      final file = await ref
+          .read(htmlExportServiceProvider)
+          .writeHtml(content, enhance: enhance);
+      if (!mounted) {
+        return;
+      }
+      final controller = WebViewController()
+        ..setJavaScriptMode(JavaScriptMode.disabled)
+        ..loadFile(file.path);
+      setState(() {
+        _filePath = file.path;
+        _controller = controller;
+        _generating = false;
+      });
+    } catch (error) {
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _generating = false;
+        _mode = null;
+        _errorMessage =
+            '生成失败：$error\n\n请到设置里的 AI 模型配置检查 Atlas BFF 地址、API Key、Base URL 和模型名称。';
+      });
+    }
+  }
+}
+
+enum _HtmlPreviewMode {
+  summary('summary'),
+  original('original');
+
+  const _HtmlPreviewMode(this.apiValue);
+
+  final String apiValue;
+}
+
+class _HtmlPreviewModePicker extends StatelessWidget {
+  const _HtmlPreviewModePicker({required this.onSelect});
+
+  final ValueChanged<_HtmlPreviewMode> onSelect;
+
+  @override
+  Widget build(BuildContext context) {
+    return ListView(
+      padding: const EdgeInsets.all(AtlasSpacing.md),
+      children: [
+        FilledButton.icon(
+          onPressed: () => onSelect(_HtmlPreviewMode.summary),
+          icon: const Icon(Icons.summarize_outlined),
+          label: const Text('总结全文'),
+        ),
+        const SizedBox(height: AtlasSpacing.sm),
+        OutlinedButton.icon(
+          onPressed: () => onSelect(_HtmlPreviewMode.original),
+          icon: const Icon(Icons.article_outlined),
+          label: const Text('原文展示'),
+        ),
+      ],
+    );
   }
 }
 

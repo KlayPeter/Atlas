@@ -130,10 +130,19 @@ class _AiPanelState extends ConsumerState<AiPanel> {
                   final msg = _error.toString().startsWith('Exception: ')
                       ? _error.toString().substring(11)
                       : _error.toString();
-                  return Text(
-                    'AI 暂时不可用：$msg',
-                    style: TextStyle(
-                      color: Theme.of(context).colorScheme.error,
+                  return DecoratedBox(
+                    decoration: BoxDecoration(
+                      color: Theme.of(context).colorScheme.errorContainer,
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Padding(
+                      padding: const EdgeInsets.all(AtlasSpacing.sm),
+                      child: Text(
+                        '$msg\n\n请到设置里的 AI 模型配置检查 Atlas BFF 地址、API Key、Base URL 和模型名称。',
+                        style: TextStyle(
+                          color: Theme.of(context).colorScheme.onErrorContainer,
+                        ),
+                      ),
                     ),
                   );
                 },

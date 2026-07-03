@@ -29,7 +29,7 @@ export const studyRequestSchema = z.object({
 });
 
 export const htmlEnhanceRequestSchema = z.object({
-  mode: z.enum(['summary', 'study']).default('summary'),
+  mode: z.enum(['summary', 'original']).default('summary'),
   context: documentContextSchema,
 });
 

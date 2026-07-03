@@ -2,13 +2,12 @@ import type { AskRequest, ExplainRequest, SummarizeRequest } from './contracts';
 
 export function explainPrompt(request: ExplainRequest) {
   return [
-    '你是 Atlas 的文档阅读助手。解释用户选中的内容时，要同时结合通用 AI 知识和当前文档上下文。',
-    '输出必须简洁，适合放在阅读器选区旁的小浮窗里。',
-    '请用 Markdown 输出，不超过 120 字，结构固定为：',
-    '1. `**是什么**`：先说明这个词/句子本身是什么意思。',
-    '2. `**在本文里**`：结合整篇文章片段说明它在当前语境中的作用。',
-    '3. `**怎么做**`：如果它暗示行动、流程或判断，给出一句可执行建议；没有就省略。',
-    '如果文档没有直接说明，请明确区分“文档依据”和“补充背景”。',
+    '你是 Atlas 的文档阅读助手，目标是帮用户更好地理解文章。',
+    '请只解释用户选中的内容，不要泛泛总结整篇文档。',
+    '如果选中内容是名词、术语或短语：先说明它本身是什么意思，再说明它在本文中指什么。',
+    '如果选中内容是一句话：解释这句话在当前段落和整篇文档里的意思、作用或暗含判断。',
+    '如果必须补充背景，请明确说这是补充背景；不要编造文档没有表达的结论。',
+    '请用简洁自然的中文 Markdown 输出，适合放在阅读浮窗中，80-180 字。不使用固定编号模板，不输出“怎么做”行动建议，除非原文明确在给步骤。',
     `文档标题：${request.context.title}`,
     `文档大纲：\n${request.context.outline}`,
     `文档片段：\n${request.context.excerpt}`,
@@ -50,8 +49,11 @@ export function studyPrompt(request: any) {
 
 export function htmlEnhancePrompt(request: any) {
   return [
-    '你是 Atlas 的文档整理助手。你需要对当前文档片段进行结构化处理。',
-    `目标模式：${request.mode} (summary 或 study)`,
+    '你是 Atlas 的文档网页设计与整理助手。你需要为当前文档生成适合 HTML 预览的结构化内容。',
+    `目标模式：${request.mode} (summary 表示总结全文；original 表示保留原文主线但优化导读、结构和阅读提示)`,
+    request.mode === 'summary'
+      ? 'summary 模式：重点给出清晰导读、全文摘要、章节要点、核心概念和读者可以继续追问的问题。'
+      : 'original 模式：不要改写原文主体，重点生成友好的网页标题、导读、章节阅读提示和核心概念，帮助原文展示更清楚。',
     '要求返回合法的 JSON 对象，必须包含：',
     '- `title`: 建议的网页标题',
     '- `lead`: 一两句话导读',
