@@ -36,11 +36,15 @@ export interface AiConfig {
 }
 
 export function createAiProvider(config?: AiConfig): AiProvider {
-  const apiKey = config?.apiKey || env.OPENAI_API_KEY;
+  const apiKey = normalizeAiConfigValue(config?.apiKey) ?? env.OPENAI_API_KEY;
   if (!apiKey) {
     return new MockAiProvider();
   }
-  return new OpenAiProvider(apiKey, config?.baseUrl, config?.model);
+  return new OpenAiProvider(
+    apiKey,
+    normalizeAiConfigValue(config?.baseUrl),
+    normalizeAiConfigValue(config?.model),
+  );
 }
 
 class MockAiProvider implements AiProvider {
@@ -208,4 +212,25 @@ function extractPoints(text: string) {
     .map((line) => line.replace(/^[-*•\d.、\s]+/, '').trim())
     .filter((line) => line.length > 0)
     .slice(0, 5);
+}
+
+function normalizeAiConfigValue(value?: string) {
+  const normalized = value?.trim();
+  if (!normalized) {
+    return undefined;
+  }
+
+  const lowered = normalized.toLowerCase();
+  const placeholderValues = new Set([
+    'xxx',
+    'your-api-key',
+    'your_api_key',
+    'changeme',
+    'change-me',
+  ]);
+  if (placeholderValues.has(lowered)) {
+    return undefined;
+  }
+
+  return normalized;
 }

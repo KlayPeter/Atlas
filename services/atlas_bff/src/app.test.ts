@@ -65,6 +65,30 @@ describe('atlas bff', () => {
     expect(body.data.explanation).toContain('**是什么**');
   });
 
+  test('ignores placeholder provider headers and still falls back to mock', async () => {
+    resetAiGuardForTests();
+    const app = createApp();
+    const token = await deviceToken(app);
+
+    const response = await app.request('/v1/ai/explain', {
+      method: 'POST',
+      headers: {
+        authorization: `Bearer ${token}`,
+        'content-type': 'application/json',
+        'x-ai-provider-api-key': 'xxx',
+        'x-ai-provider-base-url': 'https://api.deepseek.com/v1',
+        'x-ai-provider-model': 'changeme',
+      },
+      body: JSON.stringify(explainBody),
+    });
+    const body = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(body.ok).toBe(true);
+    expect(body.data.explanation).toContain('local-first');
+    expect(body.data.explanation).toContain('**是什么**');
+  });
+
   test('explain prompt stays short-form markdown for inline popovers', () => {
     const prompt = explainPrompt(explainBody);
 

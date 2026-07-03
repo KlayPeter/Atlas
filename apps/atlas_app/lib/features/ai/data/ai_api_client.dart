@@ -84,21 +84,18 @@ class AiApiClient {
     try {
       response = await _dio.post<ResponseBody>(
         '/v1/ai/ask',
-        data: {'question': question, 'context': context.toJson(), 'stream': true},
+        data: {
+          'question': question,
+          'context': context.toJson(),
+          'stream': true,
+        },
         options: Options(
-          headers: {
-            ...headers,
-            'Accept': 'text/event-stream',
-          },
+          headers: {...headers, 'Accept': 'text/event-stream'},
           responseType: ResponseType.stream,
         ),
       );
     } on DioException catch (e) {
-      if (e.type == DioExceptionType.connectionError ||
-          e.type == DioExceptionType.connectionTimeout) {
-        throw Exception('网络连接失败，请检查网络或后端配置。');
-      }
-      throw Exception('网络异常 (${e.response?.statusCode ?? '未知错误'})');
+      throw Exception(_describeDioError(e));
     }
 
     final stream = response.data?.stream;
@@ -167,32 +164,24 @@ class AiApiClient {
       }
       return data;
     } on DioException catch (e) {
-      if (e.type == DioExceptionType.connectionError ||
-          e.type == DioExceptionType.connectionTimeout) {
-        throw Exception('网络连接失败，请检查网络或后端配置。');
-      }
-      throw Exception('网络异常 (${e.response?.statusCode ?? '未知错误'})');
+      throw Exception(_describeDioError(e));
     }
   }
 
   Future<Map<String, String>> _getAiHeaders() async {
     final token = await _deviceToken();
     final prefs = await SharedPreferences.getInstance();
-    
+
     final apiKey = prefs.getString('ai_settings_api_key');
     final baseUrl = prefs.getString('ai_settings_base_url');
     final modelName = prefs.getString('ai_settings_model_name');
-    
-    final finalApiKey = (apiKey != null && apiKey.isNotEmpty) ? apiKey : 'xxx';
-    final finalBaseUrl = (baseUrl != null && baseUrl.isNotEmpty) ? baseUrl : 'https://api.deepseek.com/v1';
-    final finalModelName = (modelName != null && modelName.isNotEmpty) ? modelName : 'deepseek-v4-pro';
 
-    return {
-      'Authorization': 'Bearer $token',
-      if (finalApiKey.isNotEmpty) 'x-ai-provider-api-key': finalApiKey,
-      if (finalBaseUrl.isNotEmpty) 'x-ai-provider-base-url': finalBaseUrl,
-      if (finalModelName.isNotEmpty) 'x-ai-provider-model': finalModelName,
-    };
+    return buildAiProviderHeaders(
+      token: token,
+      apiKey: apiKey,
+      baseUrl: baseUrl,
+      modelName: modelName,
+    );
   }
 
   Future<String> _deviceToken() async {
@@ -206,13 +195,9 @@ class AiApiClient {
     try {
       response = await _dio.post<Map<String, Object?>>('/v1/auth/device');
     } on DioException catch (e) {
-      if (e.type == DioExceptionType.connectionError ||
-          e.type == DioExceptionType.connectionTimeout) {
-        throw Exception('网络连接失败，请检查网络或后端配置。');
-      }
-      throw Exception('网络异常 (${e.response?.statusCode ?? '未知错误'})');
+      throw Exception(_describeDioError(e));
     }
-    
+
     final payload = response.data?['data'] as Map<String, Object?>?;
     final token = payload?['token'] as String?;
     if (token == null) {
@@ -221,4 +206,69 @@ class AiApiClient {
     await prefs.setString(_tokenKey, token);
     return token;
   }
+
+  String _describeDioError(DioException error) {
+    if (error.type == DioExceptionType.connectionError ||
+        error.type == DioExceptionType.connectionTimeout) {
+      return '网络连接失败，请检查 Atlas BFF 是否启动，或确认 `ATLAS_BFF_URL` 配置是否正确。';
+    }
+
+    final responseData = error.response?.data;
+    if (responseData is Map) {
+      final errorBody = responseData['error'];
+      if (errorBody is Map) {
+        final message = errorBody['message'];
+        if (message is String && message.trim().isNotEmpty) {
+          return message.trim();
+        }
+      }
+    }
+
+    return '网络异常 (${error.response?.statusCode ?? '未知错误'})';
+  }
+}
+
+Map<String, String> buildAiProviderHeaders({
+  required String token,
+  String? apiKey,
+  String? baseUrl,
+  String? modelName,
+}) {
+  final normalizedApiKey = _normalizeAiSettingValue(apiKey);
+  final normalizedBaseUrl = _normalizeAiSettingValue(baseUrl);
+  final normalizedModelName = _normalizeAiSettingValue(modelName);
+
+  final headers = <String, String>{'Authorization': 'Bearer $token'};
+  if (normalizedApiKey != null) {
+    headers['x-ai-provider-api-key'] = normalizedApiKey;
+  }
+  if (normalizedBaseUrl != null) {
+    headers['x-ai-provider-base-url'] = normalizedBaseUrl;
+  }
+  if (normalizedModelName != null) {
+    headers['x-ai-provider-model'] = normalizedModelName;
+  }
+
+  return headers;
+}
+
+String? _normalizeAiSettingValue(String? value) {
+  final normalized = value?.trim();
+  if (normalized == null || normalized.isEmpty) {
+    return null;
+  }
+
+  final lowered = normalized.toLowerCase();
+  const placeholderValues = {
+    'xxx',
+    'your-api-key',
+    'your_api_key',
+    'changeme',
+    'change-me',
+  };
+  if (placeholderValues.contains(lowered)) {
+    return null;
+  }
+
+  return normalized;
 }
