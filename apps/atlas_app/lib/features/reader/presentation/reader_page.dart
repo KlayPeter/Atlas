@@ -73,7 +73,7 @@ class _ReaderPageState extends ConsumerState<ReaderPage> {
         }
         final readingSettings =
             settings.asData?.value ?? const ReadingSettings();
-        _headerKeys.clear();
+        
         return ValueListenableBuilder<bool>(
           valueListenable: _isExplanationVisible,
           builder: (context, isVisible, child) {
