@@ -18,6 +18,7 @@ import '../../documents/application/document_content_provider.dart';
 import '../../documents/data/document_repository.dart';
 import '../../library/application/library_controller.dart';
 import '../../html_export/application/html_export_service.dart';
+import '../../html_export/presentation/html_preview_page.dart';
 import '../application/reading_settings_controller.dart';
 import 'reader_markdown_view.dart';
 
@@ -111,8 +112,7 @@ class _ReaderPageState extends ConsumerState<ReaderPage> {
             onAiExplain: (text, anchor) =>
                 _showInlineExplanation(content, text, anchor),
             onSettings: () => _showSettings(readingSettings),
-            onHtml: () =>
-                context.push(AppRoutes.htmlPreviewPath(content.summary.id)),
+            onHtml: () => _previewHtml(content),
             onShareHtml: () => _shareHtml(content),
             headerKeys: _headerKeys,
           ),
@@ -353,6 +353,30 @@ class _ReaderPageState extends ConsumerState<ReaderPage> {
       showDragHandle: true,
       builder: (context) => const _ReadingSettingsSheet(),
     );
+  }
+
+  Future<void> _previewHtml(DocumentContent document) async {
+    final mode = await showDialog<HtmlPreviewMode>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('HTML 预览'),
+        content: const Text('请选择你要预览的模式：'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(HtmlPreviewMode.original),
+            child: const Text('原文展示'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(context).pop(HtmlPreviewMode.summary),
+            child: const Text('总结全文'),
+          ),
+        ],
+      ),
+    );
+
+    if (mode == null || !mounted) return;
+
+    context.push(AppRoutes.htmlPreviewPath(document.summary.id), extra: mode);
   }
 
   Future<void> _shareHtml(DocumentContent document) async {

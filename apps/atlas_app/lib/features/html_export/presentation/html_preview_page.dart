@@ -11,9 +11,10 @@ import '../../documents/application/document_content_provider.dart';
 import '../application/html_export_service.dart';
 
 class HtmlPreviewPage extends ConsumerStatefulWidget {
-  const HtmlPreviewPage({super.key, required this.exportId});
+  const HtmlPreviewPage({super.key, required this.exportId, required this.mode});
 
   final String? exportId;
+  final HtmlPreviewMode mode;
 
   @override
   ConsumerState<HtmlPreviewPage> createState() => _HtmlPreviewPageState();
@@ -22,8 +23,8 @@ class HtmlPreviewPage extends ConsumerStatefulWidget {
 class _HtmlPreviewPageState extends ConsumerState<HtmlPreviewPage> {
   WebViewController? _controller;
   String? _filePath;
-  _HtmlPreviewMode? _mode;
-  bool _generating = false;
+  bool _generating = true;
+  bool _hasStartedGeneration = false;
   String? _errorMessage;
 
   @override
@@ -55,16 +56,19 @@ class _HtmlPreviewPageState extends ConsumerState<HtmlPreviewPage> {
             return const _HtmlPreviewError(message: '找不到文档');
           }
           final controller = _controller;
-          if (_generating) {
+          
+          if (!_hasStartedGeneration) {
+            _hasStartedGeneration = true;
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              if (mounted) _generatePreview(content);
+            });
+          }
+
+          if (_generating || controller == null) {
             return const Center(child: CircularProgressIndicator());
           }
           if (_errorMessage != null) {
             return _HtmlPreviewError(message: _errorMessage!);
-          }
-          if (_mode == null || controller == null) {
-            return _HtmlPreviewModePicker(
-              onSelect: (mode) => _generatePreview(content, mode),
-            );
           }
           return WebViewWidget(controller: controller);
         },
@@ -72,12 +76,8 @@ class _HtmlPreviewPageState extends ConsumerState<HtmlPreviewPage> {
     );
   }
 
-  Future<void> _generatePreview(
-    DocumentContent content,
-    _HtmlPreviewMode mode,
-  ) async {
+  Future<void> _generatePreview(DocumentContent content) async {
     setState(() {
-      _mode = mode;
       _generating = true;
       _errorMessage = null;
       _controller = null;
@@ -89,7 +89,7 @@ class _HtmlPreviewPageState extends ConsumerState<HtmlPreviewPage> {
           .read(aiApiClientProvider)
           .enhanceHtml(
             context: AiDocumentContext.fromDocument(content),
-            mode: mode.apiValue,
+            mode: widget.mode.apiValue,
           );
       final file = await ref
           .read(htmlExportServiceProvider)
@@ -111,7 +111,6 @@ class _HtmlPreviewPageState extends ConsumerState<HtmlPreviewPage> {
       }
       setState(() {
         _generating = false;
-        _mode = null;
         _errorMessage =
             '生成失败：$error\n\n请到设置里的 AI 模型配置检查 Atlas BFF 地址、API Key、Base URL 和模型名称。';
       });
@@ -119,39 +118,13 @@ class _HtmlPreviewPageState extends ConsumerState<HtmlPreviewPage> {
   }
 }
 
-enum _HtmlPreviewMode {
+enum HtmlPreviewMode {
   summary('summary'),
   original('original');
 
-  const _HtmlPreviewMode(this.apiValue);
+  const HtmlPreviewMode(this.apiValue);
 
   final String apiValue;
-}
-
-class _HtmlPreviewModePicker extends StatelessWidget {
-  const _HtmlPreviewModePicker({required this.onSelect});
-
-  final ValueChanged<_HtmlPreviewMode> onSelect;
-
-  @override
-  Widget build(BuildContext context) {
-    return ListView(
-      padding: const EdgeInsets.all(AtlasSpacing.md),
-      children: [
-        FilledButton.icon(
-          onPressed: () => onSelect(_HtmlPreviewMode.summary),
-          icon: const Icon(Icons.summarize_outlined),
-          label: const Text('总结全文'),
-        ),
-        const SizedBox(height: AtlasSpacing.sm),
-        OutlinedButton.icon(
-          onPressed: () => onSelect(_HtmlPreviewMode.original),
-          icon: const Icon(Icons.article_outlined),
-          label: const Text('原文展示'),
-        ),
-      ],
-    );
-  }
 }
 
 class _HtmlPreviewError extends StatelessWidget {
