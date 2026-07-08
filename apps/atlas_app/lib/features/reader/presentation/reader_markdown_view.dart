@@ -135,12 +135,16 @@ class ReaderMarkdownView extends StatelessWidget {
           label: 'AI 解释',
           onPressed: () {
             final innerState = selectableRegionState.innerRegionState;
-            // Flutter still exposes selected text through this deprecated API.
-            // Keeping the read localized makes future framework migration easy.
-            // ignore: deprecated_member_use
-            final textValue = innerState?.textEditingValue;
-            final selectedText =
-                textValue?.selection.textInside(textValue.text).trim() ?? '';
+            final delegate = SelectionContainer.maybeOf(innerState?.context ?? context) as SelectionContainerDelegate?;
+            String selectedText = delegate?.getSelectedContent()?.plainText.trim() ?? '';
+
+            if (selectedText.isEmpty || selectedText == '_') {
+              // Fallback for older behavior if the delegate approach fails
+              // ignore: deprecated_member_use
+              final textValue = innerState?.textEditingValue;
+              selectedText =
+                  textValue?.selection.textInside(textValue.text).trim() ?? '';
+            }
             final anchor =
                 selectableRegionState.contextMenuAnchors.primaryAnchor;
             innerState?.hideToolbar();
