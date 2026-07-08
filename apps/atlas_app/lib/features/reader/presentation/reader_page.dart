@@ -34,6 +34,7 @@ class _ReaderPageState extends ConsumerState<ReaderPage> {
   final _scrollController = ScrollController();
   Timer? _progressDebounce;
   OverlayEntry? _inlineExplanationOverlay;
+  final ValueNotifier<bool> _isExplanationVisible = ValueNotifier(false);
 
   @override
   void initState() {
@@ -46,6 +47,7 @@ class _ReaderPageState extends ConsumerState<ReaderPage> {
   void dispose() {
     _progressDebounce?.cancel();
     _inlineExplanationOverlay?.remove();
+    _isExplanationVisible.dispose();
     unawaited(_saveProgress(refreshLibrary: true));
     _scrollController.dispose();
     super.dispose();
@@ -72,15 +74,21 @@ class _ReaderPageState extends ConsumerState<ReaderPage> {
         final readingSettings =
             settings.asData?.value ?? const ReadingSettings();
         _headerKeys.clear();
-        return PopScope(
-          canPop: _inlineExplanationOverlay == null,
-          onPopInvokedWithResult: (didPop, _) {
-            if (didPop) {
-              return;
-            }
-            if (_inlineExplanationOverlay != null) {
-              _hideInlineExplanation();
-            }
+        return ValueListenableBuilder<bool>(
+          valueListenable: _isExplanationVisible,
+          builder: (context, isVisible, child) {
+            return PopScope(
+              canPop: !isVisible,
+              onPopInvokedWithResult: (didPop, _) {
+                if (didPop) {
+                  return;
+                }
+                if (_isExplanationVisible.value) {
+                  _hideInlineExplanation();
+                }
+              },
+              child: child!,
+            );
           },
           child: _ReaderScaffold(
             document: content,
@@ -306,17 +314,13 @@ class _ReaderPageState extends ConsumerState<ReaderPage> {
       ),
     );
     Overlay.of(context).insert(_inlineExplanationOverlay!);
-    if (mounted) {
-      setState(() {});
-    }
+    _isExplanationVisible.value = true;
   }
 
   void _hideInlineExplanation() {
     _inlineExplanationOverlay?.remove();
     _inlineExplanationOverlay = null;
-    if (mounted) {
-      setState(() {});
-    }
+    _isExplanationVisible.value = false;
   }
 
   void _handleBack() {
