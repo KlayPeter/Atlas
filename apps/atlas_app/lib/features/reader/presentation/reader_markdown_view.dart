@@ -135,8 +135,10 @@ class ReaderMarkdownView extends StatelessWidget {
           label: 'AI 解释',
           onPressed: () {
             final innerState = selectableRegionState.innerRegionState;
-            final delegate = SelectionContainer.maybeOf(innerState?.context ?? context) as SelectionContainerDelegate?;
+            final delegate = selectableRegionState.registrar as SelectionContainerDelegate?;
             String selectedText = delegate?.getSelectedContent()?.plainText.trim() ?? '';
+            
+            debugPrint('Selection: SelectedContent plainText = "$selectedText"');
 
             if (selectedText.isEmpty || selectedText == '_') {
               // Fallback for older behavior if the delegate approach fails
@@ -144,6 +146,7 @@ class ReaderMarkdownView extends StatelessWidget {
               final textValue = innerState?.textEditingValue;
               selectedText =
                   textValue?.selection.textInside(textValue.text).trim() ?? '';
+              debugPrint('Selection: fallback textValue = "$selectedText"');
             }
             final anchor =
                 selectableRegionState.contextMenuAnchors.primaryAnchor;

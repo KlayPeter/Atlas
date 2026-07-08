@@ -625,16 +625,11 @@ class _ReaderScaffold extends StatelessWidget {
         ContextMenuButtonItem(
           label: 'AI 解释',
           onPressed: () {
-            final delegate = SelectionContainer.maybeOf(selectableRegionState.context) as SelectionContainerDelegate?;
-            String selectedText = delegate?.getSelectedContent()?.plainText.trim() ?? '';
-
-            if (selectedText.isEmpty || selectedText == '_') {
-              // ignore: deprecated_member_use
-              final textValue = selectableRegionState.textEditingValue;
-              selectedText = textValue.selection
-                  .textInside(textValue.text)
-                  .trim();
-            }
+            // ignore: deprecated_member_use
+            final textValue = selectableRegionState.textEditingValue;
+            final selectedText = textValue.selection
+                .textInside(textValue.text)
+                .trim();
             final anchor =
                 selectableRegionState.contextMenuAnchors.primaryAnchor;
             selectableRegionState.hideToolbar();
