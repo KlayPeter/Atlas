@@ -24,6 +24,7 @@ class AiPanel extends ConsumerStatefulWidget {
 class _AiPanelState extends ConsumerState<AiPanel> {
   final _questionController = TextEditingController();
   AiResult? _result;
+  AiHistoryEntry? _activeEntry;
   List<AiHistoryEntry> _history = const [];
   Object? _error;
   var _loading = false;
@@ -147,7 +148,13 @@ class _AiPanelState extends ConsumerState<AiPanel> {
                   );
                 },
               ),
-            if (_result != null) _AiResultView(result: _result!),
+            if (_result != null)
+              _AiResultView(
+                result: _result!,
+                onRegenerate: _activeEntry != null
+                    ? () => _regenerateEntry(_activeEntry!)
+                    : null,
+              ),
             if (_history.isNotEmpty) ...[
               const SizedBox(height: AtlasSpacing.md),
               Text('历史', style: Theme.of(context).textTheme.titleSmall),
@@ -161,7 +168,10 @@ class _AiPanelState extends ConsumerState<AiPanel> {
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                   ),
-                  onTap: () => setState(() => _result = entry.result),
+                  onTap: () => setState(() {
+                    _result = entry.result;
+                    _activeEntry = entry;
+                  }),
                 ),
               ),
             ],
@@ -187,6 +197,7 @@ class _AiPanelState extends ConsumerState<AiPanel> {
     required AiHistoryKind kind,
     required String prompt,
     required Future<AiResult> Function() action,
+    bool forceRefresh = false,
   }) async {
     setState(() {
       _loading = true;
@@ -194,22 +205,35 @@ class _AiPanelState extends ConsumerState<AiPanel> {
     });
     try {
       final historyRepository = ref.read(aiHistoryRepositoryProvider);
-      final cached = await historyRepository.findCached(
-        documentId: widget.document.summary.id,
-        kind: kind,
-        prompt: prompt,
-      );
-      final result = cached?.result ?? await action();
-      if (cached == null) {
-        await historyRepository.save(
+      AiHistoryEntry? cached;
+      if (!forceRefresh) {
+        cached = await historyRepository.findCached(
           documentId: widget.document.summary.id,
           kind: kind,
           prompt: prompt,
-          result: result,
         );
       }
-      setState(() => _result = result);
-      await _loadHistory();
+      final result = cached?.result ?? await action();
+      
+      // Save or update cache
+      await historyRepository.save(
+        documentId: widget.document.summary.id,
+        kind: kind,
+        prompt: prompt,
+        result: result,
+      );
+      
+      // Load history to get the updated entry with ID
+      final newHistory = await historyRepository.listForDocument(widget.document.summary.id);
+      final entry = newHistory.where((e) => e.kind == kind && e.prompt == prompt).firstOrNull;
+
+      if (mounted) {
+        setState(() {
+          _result = result;
+          _history = newHistory;
+          _activeEntry = entry;
+        });
+      }
     } catch (error) {
       setState(() => _error = error);
     } finally {
@@ -232,12 +256,32 @@ class _AiPanelState extends ConsumerState<AiPanel> {
     );
   }
 
-  Future<void> _summarize() {
+  Future<void> _summarize({bool forceRefresh = false}) {
     return _run(
       kind: AiHistoryKind.summary,
       prompt: '全文总结',
       action: () => ref.read(aiApiClientProvider).summarize(_context),
+      forceRefresh: forceRefresh,
     );
+  }
+
+  Future<void> _regenerateEntry(AiHistoryEntry entry) async {
+    if (entry.kind == AiHistoryKind.summary) {
+      await _summarize(forceRefresh: true);
+    } else if (entry.kind == AiHistoryKind.explanation) {
+      await _run(
+        kind: AiHistoryKind.explanation,
+        prompt: entry.prompt,
+        action: () => ref
+            .read(aiApiClientProvider)
+            .explain(context: _context, selectedText: entry.prompt),
+        forceRefresh: true,
+      );
+    } else if (entry.kind == AiHistoryKind.question) {
+      // Questions use askStream, regenerating is a bit complex, just populate the input
+      _questionController.text = entry.prompt;
+      await _ask();
+    }
   }
 
   Future<void> _ask() async {
@@ -284,9 +328,10 @@ class _AiPanelState extends ConsumerState<AiPanel> {
 }
 
 class _AiResultView extends StatelessWidget {
-  const _AiResultView({required this.result});
+  const _AiResultView({required this.result, this.onRegenerate});
 
   final AiResult result;
+  final VoidCallback? onRegenerate;
 
   @override
   Widget build(BuildContext context) {
@@ -304,7 +349,24 @@ class _AiResultView extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(result.title, style: Theme.of(context).textTheme.titleMedium),
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    result.title,
+                    style: Theme.of(context).textTheme.titleMedium,
+                  ),
+                ),
+                if (onRegenerate != null)
+                  IconButton(
+                    tooltip: '重新生成',
+                    onPressed: onRegenerate,
+                    icon: const Icon(Icons.refresh, size: 20),
+                    padding: EdgeInsets.zero,
+                    constraints: const BoxConstraints(),
+                  ),
+              ],
+            ),
             const SizedBox(height: AtlasSpacing.sm),
             ReaderMarkdownView(
               data: markdown,
