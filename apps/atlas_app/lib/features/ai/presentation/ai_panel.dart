@@ -29,6 +29,7 @@ class _AiPanelState extends ConsumerState<AiPanel> {
   Object? _error;
   var _loading = false;
   var _isStudyMode = false;
+  var _disposed = false;
 
   @override
   void initState() {
@@ -44,6 +45,7 @@ class _AiPanelState extends ConsumerState<AiPanel> {
 
   @override
   void dispose() {
+    _disposed = true;
     _questionController.dispose();
     super.dispose();
   }
@@ -151,7 +153,7 @@ class _AiPanelState extends ConsumerState<AiPanel> {
             if (_result != null)
               _AiResultView(
                 result: _result!,
-                onRegenerate: _activeEntry != null
+                onRegenerate: (_activeEntry != null && !_loading)
                     ? () => _regenerateEntry(_activeEntry!)
                     : null,
               ),
@@ -300,6 +302,9 @@ class _AiPanelState extends ConsumerState<AiPanel> {
           in ref
               .read(aiApiClientProvider)
               .askStream(context: _context, question: question)) {
+        if (_disposed) {
+          break;
+        }
         buffer.write(chunk);
         if (mounted) {
           setState(

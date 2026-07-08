@@ -98,7 +98,7 @@ class _HtmlPreviewPageState extends ConsumerState<HtmlPreviewPage> {
         return;
       }
       final controller = WebViewController()
-        ..setJavaScriptMode(JavaScriptMode.disabled)
+        ..setJavaScriptMode(JavaScriptMode.unrestricted)
         ..loadFile(file.path);
       setState(() {
         _filePath = file.path;

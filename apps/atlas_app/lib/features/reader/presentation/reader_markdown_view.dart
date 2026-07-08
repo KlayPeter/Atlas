@@ -125,6 +125,19 @@ class ReaderMarkdownView extends StatelessWidget {
   ) {
     final copyButtons = selectableRegionState.contextMenuButtonItems
         .where((button) => button.type == ContextMenuButtonType.copy)
+        .map((button) => ContextMenuButtonItem(
+              label: button.label ?? '复制',
+              type: ContextMenuButtonType.copy,
+              onPressed: () {
+                final innerState = selectableRegionState.innerRegionState;
+                final delegate = selectableRegionState.registrar as SelectionContainerDelegate?;
+                final selectedText = delegate?.getSelectedContent()?.plainText.trim() ?? '';
+                if (selectedText.isNotEmpty && selectedText != '_') {
+                  Clipboard.setData(ClipboardData(text: selectedText));
+                }
+                innerState?.hideToolbar();
+              },
+            ))
         .toList();
 
     return AdaptiveTextSelectionToolbar.buttonItems(

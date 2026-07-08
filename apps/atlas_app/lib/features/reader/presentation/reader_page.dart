@@ -416,11 +416,13 @@ class _ReaderPageState extends ConsumerState<ReaderPage> {
           .read(htmlExportServiceProvider)
           .writeHtml(document, enhance: enhance);
 
+      messenger.hideCurrentSnackBar();
       if (!mounted) return;
       await Share.shareXFiles([
         XFile(file.path),
       ], subject: document.summary.title);
     } catch (e) {
+      messenger.hideCurrentSnackBar();
       if (!mounted) return;
       messenger.showSnackBar(SnackBar(content: Text('导出失败: $e')));
     }

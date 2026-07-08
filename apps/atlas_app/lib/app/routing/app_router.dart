@@ -34,7 +34,11 @@ final appRouterProvider = Provider<GoRouter>((ref) {
         path: AppRoutes.htmlPreview,
         builder: (context, state) {
           final exportId = state.pathParameters['exportId'];
-          return HtmlPreviewPage(exportId: exportId);
+          final mode = state.extra as HtmlPreviewMode?;
+          return HtmlPreviewPage(
+            exportId: exportId,
+            mode: mode ?? HtmlPreviewMode.summary,
+          );
         },
       ),
       GoRoute(
