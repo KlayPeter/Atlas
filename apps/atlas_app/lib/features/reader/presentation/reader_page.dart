@@ -40,13 +40,23 @@ class _ReaderPageState extends ConsumerState<ReaderPage> {
   void initState() {
     super.initState();
     _restoreOffset();
-    _scrollController.addListener(_scheduleProgressSave);
+    _scrollController.addListener(_onScroll);
+  }
+
+  void _onScroll() {
+    if (_isExplanationVisible.value) {
+      _hideInlineExplanation();
+    }
+    _scheduleProgressSave();
   }
 
   @override
   void dispose() {
     _progressDebounce?.cancel();
-    _inlineExplanationOverlay?.remove();
+    if (_inlineExplanationOverlay != null) {
+      _inlineExplanationOverlay?.remove();
+      _inlineExplanationOverlay?.dispose();
+    }
     _isExplanationVisible.dispose();
     unawaited(_saveProgress(refreshLibrary: true));
     _scrollController.dispose();
@@ -318,7 +328,9 @@ class _ReaderPageState extends ConsumerState<ReaderPage> {
   }
 
   void _hideInlineExplanation() {
+    if (_inlineExplanationOverlay == null) return;
     _inlineExplanationOverlay?.remove();
+    _inlineExplanationOverlay?.dispose();
     _inlineExplanationOverlay = null;
     _isExplanationVisible.value = false;
   }
