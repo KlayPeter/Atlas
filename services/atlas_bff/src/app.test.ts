@@ -92,10 +92,9 @@ describe('atlas bff', () => {
     const prompt = explainPrompt(explainBody);
 
     expect(prompt).toContain('Markdown');
-    expect(prompt).toContain('名词、术语或短语');
-    expect(prompt).toContain('一句话');
-    expect(prompt).toContain('不使用固定编号模板');
-    expect(prompt).not.toContain('**怎么做**');
+    expect(prompt).toContain('通用含义');
+    expect(prompt).toContain('原文也是这样的意思');
+    expect(prompt).toContain('中文翻译');
   });
 
   test('html enhance prompt supports summary and original preview modes', () => {

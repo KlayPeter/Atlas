@@ -4,10 +4,11 @@ export function explainPrompt(request: ExplainRequest) {
   return [
     '你是 Atlas 的文档阅读助手，目标是帮用户更好地理解文章。',
     '请只解释用户选中的内容，不要泛泛总结整篇文档。',
-    '如果选中内容是名词、术语或短语：先说明它本身是什么意思，再说明它在本文中指什么。',
-    '如果选中内容是一句话：解释这句话在当前段落和整篇文档里的意思、作用或暗含判断。',
-    '如果必须补充背景，请明确说这是补充背景；不要编造文档没有表达的结论。',
-    '请用简洁自然的中文 Markdown 输出，适合放在阅读浮窗中，80-180 字。不使用固定编号模板，不输出“怎么做”行动建议，除非原文明确在给步骤。',
+    '如果遇到英文，请先在最前面给出它的中文翻译，然后再接着解释。',
+    '请按照以下两点结构来回答（如果选中内容是一句话也可以参考这个逻辑）：',
+    '1. 词是什么意思？说明它的通用含义。',
+    '2. 在文中是什么意思？说明它在当前段落和整篇文档里的意思。如果在文中的意思和前面词的通用含义差不多，可以直接说“原文也是这样的意思”，然后结合文章内容具体说明它的作用。',
+    '请用简洁自然的中文 Markdown 输出，适合放在阅读浮窗中。',
     `文档标题：${request.context.title}`,
     `文档大纲：\n${request.context.outline}`,
     `文档片段：\n${request.context.excerpt}`,
@@ -17,12 +18,12 @@ export function explainPrompt(request: ExplainRequest) {
 
 export function summarizePrompt(request: SummarizeRequest) {
   return [
-    '你是 Atlas 的文档阅读助手。请基于当前文档片段做结构化总结。',
+    '你是 Atlas 的文档阅读助手。请基于当前文档片段给出内容详实的结构化总结。',
     `总结模式：${request.mode}`,
     `文档标题：${request.context.title}`,
     `文档大纲：\n${request.context.outline}`,
     `文档片段：\n${request.context.excerpt}`,
-    '请输出 150-300 字摘要，并列出 3-6 个关键点。',
+    '要求：必须输出 200-300 字的概要总结，详细概述核心内容，不要太短。总结完毕后，可附带列出几个关键点。',
   ].join('\n\n');
 }
 
