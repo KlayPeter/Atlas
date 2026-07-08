@@ -1,5 +1,11 @@
+import 'dart:convert';
+import 'dart:io';
+
 import 'package:atlas_app/features/ai/data/ai_api_client.dart';
+import 'package:atlas_app/features/ai/application/ai_models.dart';
+import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
   test('defaultAtlasBffUrl has a stable local fallback', () {
@@ -30,4 +36,90 @@ void main() {
     expect(headers['x-ai-provider-base-url'], 'https://api.deepseek.com/v1');
     expect(headers['x-ai-provider-model'], 'deepseek-v4-pro');
   });
+
+  test(
+    'refreshes device token once when BFF rejects the cached token',
+    () async {
+      SharedPreferences.setMockInitialValues({
+        'atlas.auth.deviceToken': 'stale-token',
+      });
+
+      final authHeaders = <String?>[];
+      final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+      addTearDown(() async {
+        await server.close(force: true);
+      });
+
+      server.listen((request) async {
+        if (request.uri.path == '/v1/auth/device') {
+          _writeJson(request.response, {
+            'ok': true,
+            'data': {
+              'token': 'fresh-token',
+              'expiresAt': '2026-08-07T00:00:00.000Z',
+            },
+          });
+          return;
+        }
+
+        if (request.uri.path == '/v1/ai/study/questions') {
+          await utf8.decoder.bind(request).join();
+          final auth = request.headers.value(HttpHeaders.authorizationHeader);
+          authHeaders.add(auth);
+
+          if (auth == 'Bearer stale-token') {
+            request.response.statusCode = HttpStatus.unauthorized;
+            _writeJson(request.response, {
+              'ok': false,
+              'error': {
+                'code': 'UNAUTHORIZED',
+                'message': 'Missing or invalid device token',
+              },
+            });
+            return;
+          }
+
+          _writeJson(request.response, {
+            'ok': true,
+            'data': {
+              'difficulty': 'basic',
+              'questions': [
+                {
+                  'question': 'What is Atlas?',
+                  'referenceAnswer': 'A local-first reader.',
+                },
+              ],
+            },
+          });
+          return;
+        }
+
+        request.response.statusCode = HttpStatus.notFound;
+        await request.response.close();
+      });
+
+      final baseUrl = 'http://${server.address.host}:${server.port}';
+      final client = AiApiClient(Dio(), defaultBffUrl: baseUrl);
+
+      final result = await client.generateStudyQuestions(
+        context: const AiDocumentContext(
+          documentId: 'doc-1',
+          title: 'Atlas',
+          outline: 'Intro',
+          excerpt: 'Atlas reads local files.',
+        ),
+      );
+
+      final prefs = await SharedPreferences.getInstance();
+      expect(authHeaders, ['Bearer stale-token', 'Bearer fresh-token']);
+      expect(prefs.getString('atlas.auth.deviceToken'), 'fresh-token');
+      expect(result.questions.single.question, 'What is Atlas?');
+    },
+  );
+}
+
+void _writeJson(HttpResponse response, Map<String, Object?> body) {
+  response.headers.contentType = ContentType.json;
+  response.write(jsonEncode(body));
+  response.close();
 }

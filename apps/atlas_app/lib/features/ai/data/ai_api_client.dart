@@ -84,24 +84,22 @@ class AiApiClient {
     required AiDocumentContext context,
     required String question,
   }) async* {
-    final client = await _createClient();
-    final headers = await _getAiHeaders();
     Response<ResponseBody> response;
     try {
-      response = await client.post<ResponseBody>(
-        '/v1/ai/ask',
-        data: {
-          'question': question,
-          'context': context.toJson(),
-          'stream': true,
-        },
-        options: Options(
-          headers: {...headers, 'Accept': 'text/event-stream'},
-          responseType: ResponseType.stream,
-        ),
-      );
+      response = await _postAskStream(context: context, question: question);
     } on DioException catch (e) {
-      throw Exception(_describeDioError(e));
+      if (!_isInvalidDeviceTokenError(e)) {
+        throw Exception(_describeDioError(e));
+      }
+      try {
+        response = await _postAskStream(
+          context: context,
+          question: question,
+          refreshDeviceToken: true,
+        );
+      } on DioException catch (retryError) {
+        throw Exception(_describeDioError(retryError));
+      }
     }
 
     final stream = response.data?.stream;
@@ -158,25 +156,59 @@ class AiApiClient {
     Map<String, Object?> body,
   ) async {
     try {
-      final client = await _createClient();
-      final headers = await _getAiHeaders();
-      final response = await client.post<Map<String, Object?>>(
-        path,
-        data: body,
-        options: Options(headers: headers),
-      );
-      final data = response.data;
-      if (data == null || data['ok'] != true) {
-        throw Exception('AI 请求失败');
-      }
-      return data;
+      return await _postOnce(path, body);
     } on DioException catch (e) {
+      if (_isInvalidDeviceTokenError(e)) {
+        try {
+          return await _postOnce(path, body, refreshDeviceToken: true);
+        } on DioException catch (retryError) {
+          throw Exception(_describeDioError(retryError));
+        }
+      }
       throw Exception(_describeDioError(e));
     }
   }
 
-  Future<Map<String, String>> _getAiHeaders() async {
-    final token = await _deviceToken();
+  Future<Map<String, Object?>> _postOnce(
+    String path,
+    Map<String, Object?> body, {
+    bool refreshDeviceToken = false,
+  }) async {
+    final client = await _createClient();
+    final headers = await _getAiHeaders(refreshDeviceToken: refreshDeviceToken);
+    final response = await client.post<Map<String, Object?>>(
+      path,
+      data: body,
+      options: Options(headers: headers),
+    );
+    final data = response.data;
+    if (data == null || data['ok'] != true) {
+      throw Exception('AI 请求失败');
+    }
+    return data;
+  }
+
+  Future<Response<ResponseBody>> _postAskStream({
+    required AiDocumentContext context,
+    required String question,
+    bool refreshDeviceToken = false,
+  }) async {
+    final client = await _createClient();
+    final headers = await _getAiHeaders(refreshDeviceToken: refreshDeviceToken);
+    return client.post<ResponseBody>(
+      '/v1/ai/ask',
+      data: {'question': question, 'context': context.toJson(), 'stream': true},
+      options: Options(
+        headers: {...headers, 'Accept': 'text/event-stream'},
+        responseType: ResponseType.stream,
+      ),
+    );
+  }
+
+  Future<Map<String, String>> _getAiHeaders({
+    bool refreshDeviceToken = false,
+  }) async {
+    final token = await _deviceToken(refresh: refreshDeviceToken);
     final prefs = await SharedPreferences.getInstance();
 
     final apiKey = prefs.getString('ai_settings_api_key');
@@ -191,11 +223,14 @@ class AiApiClient {
     );
   }
 
-  Future<String> _deviceToken() async {
+  Future<String> _deviceToken({bool refresh = false}) async {
     final prefs = await SharedPreferences.getInstance();
-    final existing = prefs.getString(_tokenKey);
-    if (existing != null) {
+    final existing = refresh ? null : prefs.getString(_tokenKey);
+    if (existing != null && existing.isNotEmpty) {
       return existing;
+    }
+    if (refresh) {
+      await prefs.remove(_tokenKey);
     }
 
     Response<Map<String, Object?>> response;
@@ -213,6 +248,27 @@ class AiApiClient {
     }
     await prefs.setString(_tokenKey, token);
     return token;
+  }
+
+  bool _isInvalidDeviceTokenError(DioException error) {
+    if (error.response?.statusCode != 401) {
+      return false;
+    }
+
+    final responseData = error.response?.data;
+    if (responseData is! Map) {
+      return false;
+    }
+    final errorBody = responseData['error'];
+    if (errorBody is! Map) {
+      return false;
+    }
+
+    final code = errorBody['code'];
+    final message = errorBody['message'];
+    return code == 'UNAUTHORIZED' &&
+        message is String &&
+        message.toLowerCase().contains('device token');
   }
 
   String _describeDioError(DioException error) {
