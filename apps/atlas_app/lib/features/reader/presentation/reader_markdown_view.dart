@@ -738,32 +738,39 @@ class _ReaderTableBuilder extends MarkdownWidgetBuilder {
     ];
 
     return LayoutBuilder(
-      builder: (context, constraints) => ClipRRect(
-        borderRadius: BorderRadius.circular(8),
-        child: DecoratedBox(
-          decoration: BoxDecoration(
-            border: Border.all(
-              color: Theme.of(
-                context,
-              ).colorScheme.outlineVariant.withValues(alpha: 0.8),
+      builder: (context, constraints) {
+        final columnWidth = math.max(
+          120.0,
+          math.min(240.0, constraints.maxWidth / columnCount),
+        );
+
+        return ClipRRect(
+          borderRadius: BorderRadius.circular(8),
+          child: DecoratedBox(
+            decoration: BoxDecoration(
+              border: Border.all(
+                color: Theme.of(
+                  context,
+                ).colorScheme.outlineVariant.withValues(alpha: 0.8),
+              ),
+              borderRadius: BorderRadius.circular(8),
             ),
-            borderRadius: BorderRadius.circular(8),
-          ),
-          child: SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            padding: const EdgeInsets.only(bottom: 4),
-            child: ConstrainedBox(
-              constraints: BoxConstraints(minWidth: constraints.maxWidth),
-              child: Table(
-                border: styleSheet.tableBorder,
-                defaultColumnWidth: const IntrinsicColumnWidth(),
-                defaultVerticalAlignment: TableCellVerticalAlignment.middle,
-                children: rows,
+            child: SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              padding: const EdgeInsets.only(bottom: 4),
+              child: ConstrainedBox(
+                constraints: BoxConstraints(minWidth: constraints.maxWidth),
+                child: Table(
+                  border: styleSheet.tableBorder,
+                  defaultColumnWidth: FixedColumnWidth(columnWidth),
+                  defaultVerticalAlignment: TableCellVerticalAlignment.middle,
+                  children: rows,
+                ),
               ),
             ),
           ),
-        ),
-      ),
+        );
+      },
     );
   }
 

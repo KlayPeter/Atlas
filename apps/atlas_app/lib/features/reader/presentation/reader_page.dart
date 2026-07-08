@@ -46,7 +46,7 @@ class _ReaderPageState extends ConsumerState<ReaderPage> {
   void dispose() {
     _progressDebounce?.cancel();
     _inlineExplanationOverlay?.remove();
-    _saveProgress();
+    unawaited(_saveProgress(refreshLibrary: true));
     _scrollController.dispose();
     super.dispose();
   }
@@ -71,20 +71,33 @@ class _ReaderPageState extends ConsumerState<ReaderPage> {
         }
         final readingSettings =
             settings.asData?.value ?? const ReadingSettings();
-        return _ReaderScaffold(
-          document: content,
-          scrollController: _scrollController,
-          settings: readingSettings,
-          onShowToc: () => _showToc(content),
-          onSearch: () => _showSearch(content),
-          onAi: () => _showAi(content),
-          onAiExplain: (text, anchor) =>
-              _showInlineExplanation(content, text, anchor),
-          onSettings: () => _showSettings(readingSettings),
-          onHtml: () =>
-              context.push(AppRoutes.htmlPreviewPath(content.summary.id)),
-          onShareHtml: () => _shareHtml(content),
-          headerKeys: _headerKeys,
+        _headerKeys.clear();
+        return PopScope(
+          canPop: _inlineExplanationOverlay == null,
+          onPopInvokedWithResult: (didPop, _) {
+            if (didPop) {
+              return;
+            }
+            if (_inlineExplanationOverlay != null) {
+              _hideInlineExplanation();
+            }
+          },
+          child: _ReaderScaffold(
+            document: content,
+            scrollController: _scrollController,
+            settings: readingSettings,
+            onBack: _handleBack,
+            onShowToc: () => _showToc(content),
+            onSearch: () => _showSearch(content),
+            onAi: () => _showAi(content),
+            onAiExplain: (text, anchor) =>
+                _showInlineExplanation(content, text, anchor),
+            onSettings: () => _showSettings(readingSettings),
+            onHtml: () =>
+                context.push(AppRoutes.htmlPreviewPath(content.summary.id)),
+            onShareHtml: () => _shareHtml(content),
+            headerKeys: _headerKeys,
+          ),
         );
       },
     );
@@ -115,7 +128,7 @@ class _ReaderPageState extends ConsumerState<ReaderPage> {
     _progressDebounce = Timer(const Duration(milliseconds: 500), _saveProgress);
   }
 
-  Future<void> _saveProgress() async {
+  Future<void> _saveProgress({bool refreshLibrary = false}) async {
     final id = widget.documentId;
     if (id == null || !_scrollController.hasClients) {
       return;
@@ -130,37 +143,28 @@ class _ReaderPageState extends ConsumerState<ReaderPage> {
     final libNotifier = ref.read(libraryControllerProvider.notifier);
 
     await repo.saveProgress(id, offset, progress);
-    libNotifier.refresh();
+    if (refreshLibrary) {
+      libNotifier.refresh();
+    }
   }
 
   Future<void> _showToc(DocumentContent document) {
     return showModalBottomSheet<void>(
       context: context,
+      isScrollControlled: true,
       showDragHandle: true,
-      builder: (context) => SafeArea(
-        child: ListView(
-          shrinkWrap: true,
-          children: [
-            Padding(
-              padding: const EdgeInsets.all(AtlasSpacing.md),
-              child: Text('目录', style: Theme.of(context).textTheme.titleMedium),
-            ),
-            if (document.sections.isEmpty)
-              const ListTile(title: Text('这份文档没有标题'))
-            else
-              for (final section in document.sections)
-                ListTile(
-                  contentPadding: EdgeInsets.only(
-                    left: AtlasSpacing.md + (section.level - 1) * 16,
-                    right: AtlasSpacing.md,
-                  ),
-                  title: Text(section.title),
-                  onTap: () {
-                    Navigator.of(context).pop();
-                    _jumpToSection(document, section);
-                  },
-                ),
-          ],
+      builder: (context) => DraggableScrollableSheet(
+        expand: false,
+        initialChildSize: 0.64,
+        minChildSize: 0.32,
+        maxChildSize: 0.9,
+        builder: (context, sheetController) => _TocSheet(
+          document: document,
+          scrollController: sheetController,
+          onSectionSelected: (section) {
+            Navigator.of(context).pop();
+            _jumpToSection(document, section);
+          },
         ),
       ),
     );
@@ -302,11 +306,29 @@ class _ReaderPageState extends ConsumerState<ReaderPage> {
       ),
     );
     Overlay.of(context).insert(_inlineExplanationOverlay!);
+    if (mounted) {
+      setState(() {});
+    }
   }
 
   void _hideInlineExplanation() {
     _inlineExplanationOverlay?.remove();
     _inlineExplanationOverlay = null;
+    if (mounted) {
+      setState(() {});
+    }
+  }
+
+  void _handleBack() {
+    if (_inlineExplanationOverlay != null) {
+      _hideInlineExplanation();
+      return;
+    }
+    if (context.canPop()) {
+      context.pop();
+      return;
+    }
+    context.go(AppRoutes.library);
   }
 
   Future<void> _showSettings(ReadingSettings settings) {
@@ -365,11 +387,69 @@ class _ReaderPageState extends ConsumerState<ReaderPage> {
   }
 }
 
+class _TocSheet extends StatelessWidget {
+  const _TocSheet({
+    required this.document,
+    required this.scrollController,
+    required this.onSectionSelected,
+  });
+
+  final DocumentContent document;
+  final ScrollController scrollController;
+  final ValueChanged<DocumentSection> onSectionSelected;
+
+  @override
+  Widget build(BuildContext context) {
+    final sections = document.sections;
+
+    return SafeArea(
+      child: ListView.builder(
+        controller: scrollController,
+        padding: const EdgeInsets.only(bottom: AtlasSpacing.md),
+        itemCount: sections.isEmpty ? 2 : sections.length + 1,
+        itemBuilder: (context, index) {
+          if (index == 0) {
+            return Padding(
+              padding: const EdgeInsets.fromLTRB(
+                AtlasSpacing.md,
+                AtlasSpacing.sm,
+                AtlasSpacing.md,
+                AtlasSpacing.xs,
+              ),
+              child: Text('目录', style: Theme.of(context).textTheme.titleMedium),
+            );
+          }
+
+          if (sections.isEmpty) {
+            return const ListTile(title: Text('这份文档没有标题'));
+          }
+
+          final section = sections[index - 1];
+          return ListTile(
+            dense: true,
+            contentPadding: EdgeInsets.only(
+              left: AtlasSpacing.md + (section.level - 1) * 16,
+              right: AtlasSpacing.md,
+            ),
+            title: Text(
+              section.title,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+            ),
+            onTap: () => onSectionSelected(section),
+          );
+        },
+      ),
+    );
+  }
+}
+
 class _ReaderScaffold extends StatelessWidget {
   const _ReaderScaffold({
     required this.document,
     required this.scrollController,
     required this.settings,
+    required this.onBack,
     required this.onShowToc,
     required this.onSearch,
     required this.onAi,
@@ -383,6 +463,7 @@ class _ReaderScaffold extends StatelessWidget {
   final DocumentContent document;
   final ScrollController scrollController;
   final ReadingSettings settings;
+  final VoidCallback onBack;
   final VoidCallback onShowToc;
   final VoidCallback onSearch;
   final VoidCallback onAi;
@@ -405,6 +486,12 @@ class _ReaderScaffold extends StatelessWidget {
     return Scaffold(
       backgroundColor: background,
       appBar: AppBar(
+        leading: IconButton(
+          tooltip: '返回',
+          onPressed: onBack,
+          icon: const Icon(Icons.arrow_back_rounded),
+        ),
+        scrolledUnderElevation: 0,
         title: Text(document.summary.title, overflow: TextOverflow.ellipsis),
         actions: [
           IconButton(
@@ -437,57 +524,85 @@ class _ReaderScaffold extends StatelessWidget {
           ),
         ],
       ),
-      body: ListView(
-        controller: scrollController,
-        padding: EdgeInsets.fromLTRB(
-          math.min(settings.pagePadding, AtlasSpacing.md),
-          AtlasSpacing.sm,
-          math.min(settings.pagePadding, AtlasSpacing.md),
-          AtlasSpacing.xl,
-        ),
-        children: [
-          DecoratedBox(
-            decoration: BoxDecoration(color: paperColor),
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(8, 12, 8, 28),
-              child: document.summary.kind == DocumentKind.markdown
-                  ? ReaderMarkdownView(
-                      data: document.rawText,
-                      settings: settings,
-                      onAiExplain: onAiExplain,
-                      headerKeys: headerKeys,
-                    )
-                  : SelectionArea(
-                      contextMenuBuilder: (context, selectableRegionState) =>
-                          _buildPlainTextSelectionToolbar(
-                            context,
-                            selectableRegionState,
-                          ),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          for (final paragraph in document.paragraphs)
-                            Padding(
-                              padding: const EdgeInsets.only(
-                                bottom: AtlasSpacing.md,
-                              ),
-                              child: Text(
-                                paragraph,
-                                style: settings.bodyStyle(context),
-                              ),
-                            ),
-                        ],
-                      ),
-                    ),
-            ),
-          ),
-        ],
-      ),
+      body: document.summary.kind == DocumentKind.markdown
+          ? _buildMarkdownBody(paperColor)
+          : _buildPlainTextBody(paperColor),
       floatingActionButton: FloatingActionButton(
         onPressed: onAi,
         tooltip: 'AI 助手',
         child: const Icon(Icons.auto_awesome_outlined),
       ),
+    );
+  }
+
+  EdgeInsets _readerPadding() {
+    return EdgeInsets.fromLTRB(
+      math.min(settings.pagePadding, AtlasSpacing.md),
+      AtlasSpacing.sm,
+      math.min(settings.pagePadding, AtlasSpacing.md),
+      AtlasSpacing.xl,
+    );
+  }
+
+  Widget _buildMarkdownBody(Color paperColor) {
+    return ListView(
+      controller: scrollController,
+      padding: _readerPadding(),
+      cacheExtent: 900,
+      keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+      children: [
+        RepaintBoundary(
+          child: DecoratedBox(
+            decoration: BoxDecoration(color: paperColor),
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(8, 12, 8, 28),
+              child: ReaderMarkdownView(
+                data: document.rawText,
+                settings: settings,
+                onAiExplain: onAiExplain,
+                headerKeys: headerKeys,
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildPlainTextBody(Color paperColor) {
+    final bodyStyle = settings.bodyStyle;
+    return ListView.builder(
+      controller: scrollController,
+      padding: _readerPadding(),
+      cacheExtent: 1200,
+      keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+      itemCount: document.paragraphs.length,
+      itemBuilder: (context, index) {
+        return RepaintBoundary(
+          child: DecoratedBox(
+            decoration: BoxDecoration(color: paperColor),
+            child: Padding(
+              padding: EdgeInsets.fromLTRB(
+                8,
+                index == 0 ? 12 : 0,
+                8,
+                index == document.paragraphs.length - 1 ? 28 : AtlasSpacing.md,
+              ),
+              child: SelectionArea(
+                contextMenuBuilder: (context, selectableRegionState) =>
+                    _buildPlainTextSelectionToolbar(
+                      context,
+                      selectableRegionState,
+                    ),
+                child: Text(
+                  document.paragraphs[index],
+                  style: bodyStyle(context),
+                ),
+              ),
+            ),
+          ),
+        );
+      },
     );
   }
 
