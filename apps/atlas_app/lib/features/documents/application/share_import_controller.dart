@@ -64,37 +64,37 @@ class ShareImportController {
 
   Future<void> _handleSharedMedia(List<SharedMediaFile> files) async {
     for (final item in files) {
-      final file = await _fileFromSharedMedia(item);
-      if (file == null) {
+      final sharedFile = await _fileFromSharedMedia(item);
+      if (sharedFile == null) {
         continue;
       }
       try {
-        final document = await repository.importFile(file);
-        
-        // **IMPORT**: invalidate library so that the recent documents list reflects the new item
-        ref.read(libraryControllerProvider.notifier).refresh();
-        
+        final document = await repository.importFile(sharedFile.file);
+        await ref.read(libraryControllerProvider.notifier).refresh();
         router.push(AppRoutes.readerPath(document.id));
       } on DocumentImportFailure {
         continue;
+      } finally {
+        if (sharedFile.temporary && await sharedFile.file.exists()) {
+          await sharedFile.file.delete();
+        }
       }
     }
   }
 
-  Future<File?> _fileFromSharedMedia(SharedMediaFile item) async {
+  Future<({File file, bool temporary})?> _fileFromSharedMedia(
+    SharedMediaFile item,
+  ) async {
     if (item.type == SharedMediaType.file) {
-      return File(item.path);
+      return (file: File(item.path), temporary: false);
     }
     if (item.type == SharedMediaType.text || item.type == SharedMediaType.url) {
-      final possibleFile = File(item.path);
-      if (possibleFile.existsSync()) {
-        return possibleFile;
-      }
       final tempDir = await getTemporaryDirectory();
       final file = File(
         '${tempDir.path}/atlas-shared-${DateTime.now().microsecondsSinceEpoch}.txt',
       );
-      return file.writeAsString(item.path, flush: true);
+      await file.writeAsString(item.path, flush: true);
+      return (file: file, temporary: true);
     }
     return null;
   }
