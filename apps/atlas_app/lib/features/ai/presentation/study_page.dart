@@ -20,16 +20,26 @@ class StudyView extends ConsumerStatefulWidget {
 }
 
 class _StudyViewState extends ConsumerState<StudyView> {
+  final _answerController = TextEditingController();
   var _loading = true;
   Object? _error;
   StudyResult? _result;
-  int _currentIndex = 0;
-  bool _showAnswer = false;
+  var _currentIndex = 0;
+  var _showAnswer = false;
+  var _difficulty = 'basic';
+  final Map<int, String> _answers = {};
+  final Map<int, int> _confidence = {};
 
   @override
   void initState() {
     super.initState();
     _loadQuestions();
+  }
+
+  @override
+  void dispose() {
+    _answerController.dispose();
+    super.dispose();
   }
 
   Future<void> _loadQuestions() async {
@@ -41,10 +51,15 @@ class _StudyViewState extends ConsumerState<StudyView> {
       final context = AiDocumentContext.fromDocument(widget.document);
       final result = await ref
           .read(aiApiClientProvider)
-          .generateStudyQuestions(context: context);
+          .generateStudyQuestions(context: context, difficulty: _difficulty);
       if (mounted) {
         setState(() {
           _result = result;
+          _currentIndex = 0;
+          _showAnswer = false;
+          _answers.clear();
+          _confidence.clear();
+          _answerController.clear();
           _loading = false;
         });
       }
@@ -58,29 +73,45 @@ class _StudyViewState extends ConsumerState<StudyView> {
     }
   }
 
-  void _nextQuestion() {
-    if (_result == null) return;
-    if (_currentIndex < _result!.questions.length - 1) {
-      setState(() {
-        _currentIndex++;
-        _showAnswer = false;
-      });
-    }
+  void _goToQuestion(int index) {
+    _answers[_currentIndex] = _answerController.text.trim();
+    setState(() {
+      _currentIndex = index;
+      _answerController.text = _answers[index] ?? '';
+      _showAnswer = _confidence.containsKey(index);
+    });
   }
 
-  void _prevQuestion() {
-    if (_currentIndex > 0) {
-      setState(() {
-        _currentIndex--;
-        _showAnswer = false;
-      });
-    }
+  void _changeDifficulty(String difficulty) {
+    if (difficulty == _difficulty || _loading) return;
+    setState(() => _difficulty = difficulty);
+    _loadQuestions();
+  }
+
+  Future<void> _finishStudy() async {
+    final mastered = _confidence.values.where((value) => value == 2).length;
+    final reviewing = _confidence.values.where((value) => value == 1).length;
+    final unfamiliar = _confidence.values.where((value) => value == 0).length;
+    await showDialog<void>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('本轮学习完成'),
+        content: Text(
+          '已掌握 $mastered 题 · 基本掌握 $reviewing 题 · 需要复习 $unfamiliar 题',
+        ),
+        actions: [
+          FilledButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('完成'),
+          ),
+        ],
+      ),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
     return Column(
-      mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         Row(
@@ -99,8 +130,20 @@ class _StudyViewState extends ConsumerState<StudyView> {
             ),
           ],
         ),
+        const SizedBox(height: AtlasSpacing.sm),
+        SegmentedButton<String>(
+          segments: const [
+            ButtonSegment(value: 'basic', label: Text('基础')),
+            ButtonSegment(value: 'advanced', label: Text('进阶')),
+            ButtonSegment(value: 'challenge', label: Text('挑战')),
+          ],
+          selected: {_difficulty},
+          onSelectionChanged: _loading
+              ? null
+              : (selection) => _changeDifficulty(selection.single),
+        ),
         const SizedBox(height: AtlasSpacing.md),
-        _buildBody(),
+        Expanded(child: _buildBody()),
       ],
     );
   }
@@ -156,73 +199,109 @@ class _StudyViewState extends ConsumerState<StudyView> {
 
     final question = result.questions[_currentIndex];
 
-    return Padding(
+    return ListView(
       padding: const EdgeInsets.symmetric(horizontal: AtlasSpacing.sm),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          LinearProgressIndicator(
-            value: (_currentIndex + 1) / result.questions.length,
+      children: [
+        LinearProgressIndicator(
+          value: (_currentIndex + 1) / result.questions.length,
+        ),
+        const SizedBox(height: AtlasSpacing.md),
+        Text(
+          '题目 ${_currentIndex + 1} / ${result.questions.length}',
+          style: Theme.of(context).textTheme.labelLarge,
+          textAlign: TextAlign.center,
+        ),
+        const SizedBox(height: AtlasSpacing.md),
+        Card(
+          child: Padding(
+            padding: const EdgeInsets.all(AtlasSpacing.lg),
+            child: Text(
+              question.question,
+              textAlign: TextAlign.center,
+              style: Theme.of(context).textTheme.titleMedium,
+            ),
           ),
-          const SizedBox(height: AtlasSpacing.md),
-          Text(
-            '题目 ${_currentIndex + 1} / ${result.questions.length}',
-            style: Theme.of(context).textTheme.labelLarge,
-            textAlign: TextAlign.center,
+        ),
+        const SizedBox(height: AtlasSpacing.sm),
+        TextField(
+          controller: _answerController,
+          enabled: !_showAnswer,
+          onChanged: (_) => setState(() {}),
+          minLines: 2,
+          maxLines: 4,
+          decoration: const InputDecoration(
+            labelText: '先写下你的回答',
+            hintText: '答案只保留在本轮学习中',
+            alignLabelWithHint: true,
           ),
-          const SizedBox(height: AtlasSpacing.md),
+        ),
+        const SizedBox(height: AtlasSpacing.sm),
+        if (!_showAnswer)
+          FilledButton.tonalIcon(
+            onPressed: () {
+              _answers[_currentIndex] = _answerController.text.trim();
+              setState(() => _showAnswer = true);
+            },
+            icon: const Icon(Icons.visibility_outlined),
+            label: Text(
+              _answerController.text.trim().isEmpty ? '直接查看参考答案' : '对照参考答案',
+            ),
+          ),
+        if (_showAnswer) ...[
+          Text('参考答案', style: Theme.of(context).textTheme.titleSmall),
+          const SizedBox(height: AtlasSpacing.xs),
           Card(
-            child: InkWell(
-              onTap: () => setState(() => _showAnswer = !_showAnswer),
-              child: Padding(
-                padding: const EdgeInsets.all(AtlasSpacing.lg),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(
-                      question.question,
-                      textAlign: TextAlign.center,
-                      style: Theme.of(context).textTheme.titleMedium,
-                    ),
-                    const SizedBox(height: AtlasSpacing.md),
-                    if (_showAnswer)
-                      ReaderMarkdownView(
-                        data: question.referenceAnswer,
-                        settings: const ReadingSettings(
-                          fontSize: 15,
-                          lineHeight: 1.5,
-                        ),
-                        compact: true,
-                      )
-                    else
-                      const Text(
-                        '点击卡片查看答案',
-                        style: TextStyle(color: Colors.grey),
-                      ),
-                  ],
-                ),
+            color: Theme.of(context).colorScheme.surfaceContainerLow,
+            child: Padding(
+              padding: const EdgeInsets.all(AtlasSpacing.md),
+              child: ReaderMarkdownView(
+                data: question.referenceAnswer,
+                settings: const ReadingSettings(fontSize: 15, lineHeight: 1.5),
+                compact: true,
               ),
             ),
           ),
-          const SizedBox(height: AtlasSpacing.md),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          const SizedBox(height: AtlasSpacing.sm),
+          Text('对照后，你掌握得怎么样？', style: Theme.of(context).textTheme.labelLarge),
+          const SizedBox(height: AtlasSpacing.xs),
+          Wrap(
+            spacing: AtlasSpacing.xs,
             children: [
-              TextButton(
-                onPressed: _currentIndex > 0 ? _prevQuestion : null,
-                child: const Text('上一题'),
-              ),
-              FilledButton(
-                onPressed: _currentIndex < result.questions.length - 1
-                    ? _nextQuestion
-                    : null,
-                child: const Text('下一题'),
-              ),
+              for (final entry in const [(0, '需要复习'), (1, '基本掌握'), (2, '已掌握')])
+                ChoiceChip(
+                  label: Text(entry.$2),
+                  selected: _confidence[_currentIndex] == entry.$1,
+                  onSelected: (_) => setState(() {
+                    _confidence[_currentIndex] = entry.$1;
+                  }),
+                ),
             ],
           ),
         ],
-      ),
+        const SizedBox(height: AtlasSpacing.md),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            TextButton(
+              onPressed: _currentIndex > 0
+                  ? () => _goToQuestion(_currentIndex - 1)
+                  : null,
+              child: const Text('上一题'),
+            ),
+            FilledButton(
+              onPressed: !_showAnswer || !_confidence.containsKey(_currentIndex)
+                  ? null
+                  : _currentIndex < result.questions.length - 1
+                  ? () => _goToQuestion(_currentIndex + 1)
+                  : _finishStudy,
+              child: Text(
+                _currentIndex < result.questions.length - 1 ? '下一题' : '完成学习',
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: AtlasSpacing.md),
+      ],
     );
   }
 }
