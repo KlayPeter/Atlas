@@ -1,4 +1,4 @@
-import type { Hono } from 'hono';
+import type { Context, Hono } from 'hono';
 import { streamSSE } from 'hono/streaming';
 import { ZodError } from 'zod';
 
@@ -15,7 +15,7 @@ import { AppError } from '../shared/app_error';
 import { successResponse } from '../shared/http';
 
 export function registerAiRoutes(app: Hono) {
-  function getProvider(context: any) {
+  function getProvider(context: Context) {
     return createAiProvider({
       apiKey: context.req.header('x-ai-provider-api-key'),
       baseUrl: context.req.header('x-ai-provider-base-url'),

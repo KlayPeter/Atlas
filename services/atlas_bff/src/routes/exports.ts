@@ -1,4 +1,4 @@
-import type { Hono } from 'hono';
+import type { Context, Hono } from 'hono';
 
 import { requireDeviceToken } from '../middleware/auth';
 import { aiGuard } from '../middleware/ai_guard';
@@ -8,7 +8,7 @@ import { htmlEnhanceRequestSchema } from '../modules/ai/contracts';
 import { createAiProvider } from '../modules/ai/ai_provider';
 
 export function registerExportRoutes(app: Hono) {
-  function getProvider(context: any) {
+  function getProvider(context: Context) {
     return createAiProvider({
       apiKey: context.req.header('x-ai-provider-api-key'),
       baseUrl: context.req.header('x-ai-provider-base-url'),
