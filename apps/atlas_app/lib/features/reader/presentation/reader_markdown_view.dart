@@ -980,7 +980,7 @@ class _ReaderRemoteImage extends StatefulWidget {
 }
 
 class _ReaderRemoteImageState extends State<_ReaderRemoteImage> {
-  var _allowed = false;
+  var _allowed = true;
 
   @override
   Widget build(BuildContext context) {

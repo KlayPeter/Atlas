@@ -78,10 +78,14 @@ class ShareImportController {
         _handleSharedMedia,
         onError: (_) {},
       );
-      final initialMedia = await ReceiveSharingIntent.instance
-          .getInitialMedia();
-      await _handleSharedMedia(initialMedia);
-      await ReceiveSharingIntent.instance.reset();
+      
+      Future.delayed(const Duration(milliseconds: 250), () async {
+        final initialMedia = await ReceiveSharingIntent.instance.getInitialMedia();
+        if (initialMedia.isNotEmpty) {
+          await _handleSharedMedia(initialMedia);
+          await ReceiveSharingIntent.instance.reset();
+        }
+      });
     } on MissingPluginException {
       await _subscription?.cancel();
       _subscription = null;

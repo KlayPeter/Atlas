@@ -18,7 +18,9 @@ services/atlas_bff/.env.*
 *.log
 
 # IDE
-.agent/
+.agents/
 .idea/
 .vscode/
 *.iml
+.codegraph/
+AGENTS.md
