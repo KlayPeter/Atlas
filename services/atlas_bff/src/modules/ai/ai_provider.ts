@@ -43,6 +43,7 @@ export interface AiProvider {
   explain(request: ExplainRequest): Promise<ExplainResult>;
   summarize(request: SummarizeRequest): Promise<SummaryResult>;
   ask(request: AskRequest): Promise<AskResult>;
+  askStream(request: AskRequest): AsyncIterable<string>;
   generateStudyQuestions(request: StudyRequest): Promise<{
     difficulty: StudyRequest['difficulty'];
     questions: Array<{ question: string; referenceAnswer: string }>;
@@ -186,7 +187,7 @@ class OpenAiProvider implements AiProvider {
   async explain(request: ExplainRequest): Promise<ExplainResult> {
     const text = await this.complete(explainPrompt(request));
     return {
-      title: request.selectedText,
+      title: request.mode === 'translate' ? '翻译' : request.selectedText,
       explanation: text,
       points: extractPoints(text),
     };
@@ -210,6 +211,20 @@ class OpenAiProvider implements AiProvider {
         .filter(Boolean)
         .slice(0, 3),
     };
+  }
+
+  async *askStream(request: AskRequest): AsyncIterable<string> {
+    const response = await this.client.chat.completions.create({
+      model: this.model,
+      messages: [{ role: 'user', content: askPrompt(request) }],
+      stream: true,
+    });
+    for await (const part of response) {
+      const text = part.choices[0]?.delta?.content;
+      if (text) {
+        yield text;
+      }
+    }
   }
 
   async generateStudyQuestions(request: StudyRequest) {

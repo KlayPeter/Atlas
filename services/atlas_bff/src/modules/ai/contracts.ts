@@ -9,6 +9,7 @@ export const documentContextSchema = z.object({
 
 export const explainRequestSchema = z.object({
   selectedText: z.string().min(1).max(4000),
+  mode: z.enum(['explain', 'translate']).default('explain'),
   context: documentContextSchema,
 });
 

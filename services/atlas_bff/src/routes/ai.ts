@@ -37,19 +37,24 @@ export function registerAiRoutes(app: Hono) {
 
   app.post('/v1/ai/ask', requireDeviceToken(), aiGuard(), async (context) => {
     const request = askRequestSchema.parse(await context.req.json());
-    const result = await getProvider(context).ask(request);
+    const provider = getProvider(context);
     if (!request.stream) {
+      const result = await provider.ask(request);
       return context.json(successResponse(result));
     }
 
     return streamSSE(context, async (stream) => {
-      await stream.writeSSE({
-        event: 'chunk',
-        data: JSON.stringify({ text: result.answer }),
-      });
+      for await (const text of provider.askStream(request)) {
+        await stream.writeSSE({
+          event: 'chunk',
+          data: JSON.stringify({ text }),
+        });
+      }
       await stream.writeSSE({
         event: 'done',
-        data: JSON.stringify({ references: result.references }),
+        data: JSON.stringify({
+          references: request.context.outline.split('\n').filter(Boolean).slice(0, 3),
+        }),
       });
     });
   });

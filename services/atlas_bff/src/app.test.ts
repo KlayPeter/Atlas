@@ -3,7 +3,10 @@ import { describe, expect, test } from 'bun:test';
 import { createApp } from './app';
 import { resetAiGuardForTests } from './middleware/ai_guard';
 import { createDeviceToken, resetAuthForTests } from './middleware/auth';
-import { htmlEnhanceResultSchema } from './modules/ai/contracts';
+import {
+  explainRequestSchema,
+  htmlEnhanceResultSchema,
+} from './modules/ai/contracts';
 import { parseStructuredResponse } from './modules/ai/ai_provider';
 import { explainPrompt, htmlEnhancePrompt } from './modules/ai/prompts';
 
@@ -169,12 +172,23 @@ describe('atlas bff', () => {
   });
 
   test('explain prompt focuses on selected term or sentence meaning', () => {
-    const prompt = explainPrompt(explainBody);
+    const prompt = explainPrompt({ ...explainBody, mode: 'explain' });
 
     expect(prompt).toContain('Markdown');
     expect(prompt).toContain('通用含义');
     expect(prompt).toContain('原文也是这样的意思');
     expect(prompt).toContain('中文翻译');
+  });
+
+  test('selection translation has a dedicated prompt and defaults safely', () => {
+    const defaultRequest = explainRequestSchema.parse(explainBody);
+    const prompt = explainPrompt({ ...explainBody, mode: 'translate' });
+
+    expect(defaultRequest.mode).toBe('explain');
+    expect(prompt).toContain('划词翻译助手');
+    expect(prompt).toContain('中文翻译成自然英文');
+    expect(prompt).toContain('其他语言翻译成自然中文');
+    expect(prompt).not.toContain('通用含义');
   });
 
   test('html enhance prompt supports readable and original preview modes', () => {
