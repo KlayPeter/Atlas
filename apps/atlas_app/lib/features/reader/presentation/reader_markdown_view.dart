@@ -30,6 +30,13 @@ TextStyle _readerMono(TextStyle? style) {
   );
 }
 
+class ReaderSearchHighlight {
+  const ReaderSearchHighlight({required this.query, this.activeOccurrence});
+
+  final String query;
+  final int? activeOccurrence;
+}
+
 class ReaderMarkdownView extends StatelessWidget {
   const ReaderMarkdownView({
     super.key,
@@ -38,6 +45,7 @@ class ReaderMarkdownView extends StatelessWidget {
     this.compact = false,
     this.onAiExplain,
     this.headerKeys,
+    this.searchHighlight,
   });
 
   final String data;
@@ -45,11 +53,33 @@ class ReaderMarkdownView extends StatelessWidget {
   final bool compact;
   final void Function(String text, Offset anchor)? onAiExplain;
   final Map<String, List<GlobalKey>>? headerKeys;
+  final ReaderSearchHighlight? searchHighlight;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final styleSheet = _buildStyleSheet(context, theme);
+
+    final searchCounter = _SearchOccurrenceCounter();
+    final plugins = ParserPluginRegistry()..register(const MermaidPlugin());
+    final highlight = searchHighlight;
+    if (highlight != null && highlight.query.isNotEmpty) {
+      final firstCharacter = highlight.query[0];
+      final triggerCharacters = {
+        firstCharacter,
+        firstCharacter.toLowerCase(),
+        firstCharacter.toUpperCase(),
+      };
+      for (final trigger in triggerCharacters) {
+        plugins.register(
+          _SearchMatchPlugin(
+            query: highlight.query,
+            triggerCharacter: trigger,
+            counter: searchCounter,
+          ),
+        );
+      }
+    }
 
     return SmoothMarkdown(
       data: _normalizeMarkdownData(data),
@@ -67,11 +97,23 @@ class ReaderMarkdownView extends StatelessWidget {
         settings: settings,
       ),
       imageBuilder: (url, alt, title) => _buildImage(context, url, alt, title),
-      plugins: ParserPluginRegistry()..register(const MermaidPlugin()),
+      plugins: plugins,
       builderRegistry: BuilderRegistry()
         ..register('header', _AtlasHeaderBuilder(headerKeys))
         ..register('table', const _ReaderTableBuilder())
-        ..register('mermaid', _AtlasMermaidBuilder(compact: compact)),
+        ..register('mermaid', _AtlasMermaidBuilder(compact: compact))
+        ..register(
+          'atlas_search_match',
+          _SearchMatchBuilder(
+            activeOccurrence: searchHighlight?.activeOccurrence,
+            activeColor: theme.colorScheme.primaryContainer.withValues(
+              alpha: 0.46,
+            ),
+            matchColor: theme.colorScheme.tertiaryContainer.withValues(
+              alpha: 0.2,
+            ),
+          ),
+        ),
     );
   }
 
@@ -286,6 +328,115 @@ class ReaderMarkdownView extends StatelessWidget {
       tableCellPadding: const EdgeInsets.symmetric(
         horizontal: 12,
         vertical: 10,
+      ),
+    );
+  }
+}
+
+class _SearchOccurrenceCounter {
+  var value = 0;
+}
+
+class _SearchMatchNode extends MarkdownNode {
+  const _SearchMatchNode({required this.text, required this.occurrence});
+
+  final String text;
+  final int occurrence;
+
+  @override
+  String get type => 'atlas_search_match';
+
+  @override
+  Map<String, dynamic> toJson() => {
+    'type': type,
+    'text': text,
+    'occurrence': occurrence,
+  };
+
+  @override
+  _SearchMatchNode copyWith({String? text, int? occurrence}) {
+    return _SearchMatchNode(
+      text: text ?? this.text,
+      occurrence: occurrence ?? this.occurrence,
+    );
+  }
+}
+
+class _SearchMatchPlugin extends InlineParserPlugin {
+  const _SearchMatchPlugin({
+    required this.query,
+    required this.triggerCharacter,
+    required this.counter,
+  });
+
+  final String query;
+
+  @override
+  final String triggerCharacter;
+
+  final _SearchOccurrenceCounter counter;
+
+  @override
+  String get id => 'atlas-search-match-${triggerCharacter.codeUnits.join('-')}';
+
+  @override
+  String get name => 'Atlas search match';
+
+  @override
+  int get priority => 100;
+
+  @override
+  bool canParse(String text, int index) {
+    if (index + query.length > text.length) {
+      return false;
+    }
+    return text.substring(index, index + query.length).toLowerCase() ==
+        query.toLowerCase();
+  }
+
+  @override
+  InlineParseResult? parse(String text, int startIndex) {
+    if (!canParse(text, startIndex)) {
+      return null;
+    }
+    final occurrence = counter.value;
+    counter.value += 1;
+    return InlineParseResult(
+      node: _SearchMatchNode(
+        text: text.substring(startIndex, startIndex + query.length),
+        occurrence: occurrence,
+      ),
+      consumed: query.length,
+    );
+  }
+}
+
+class _SearchMatchBuilder extends MarkdownWidgetBuilder {
+  const _SearchMatchBuilder({
+    required this.activeOccurrence,
+    required this.activeColor,
+    required this.matchColor,
+  });
+
+  final int? activeOccurrence;
+  final Color activeColor;
+  final Color matchColor;
+
+  @override
+  bool canBuild(MarkdownNode node) => node is _SearchMatchNode;
+
+  @override
+  Widget build(
+    MarkdownNode node,
+    MarkdownStyleSheet styleSheet,
+    MarkdownRenderContext context,
+  ) {
+    final match = node as _SearchMatchNode;
+    final isActive = match.occurrence == activeOccurrence;
+    return Text.rich(
+      TextSpan(
+        text: match.text,
+        style: TextStyle(backgroundColor: isActive ? activeColor : matchColor),
       ),
     );
   }

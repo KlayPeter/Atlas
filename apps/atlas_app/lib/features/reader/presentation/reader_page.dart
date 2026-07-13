@@ -35,6 +35,8 @@ class _ReaderPageState extends ConsumerState<ReaderPage> {
   Timer? _progressDebounce;
   OverlayEntry? _inlineExplanationOverlay;
   final ValueNotifier<bool> _isExplanationVisible = ValueNotifier(false);
+  DocumentSearchResult _searchResult = const DocumentSearchResult();
+  var _activeSearchIndex = 0;
 
   @override
   void initState() {
@@ -114,6 +116,8 @@ class _ReaderPageState extends ConsumerState<ReaderPage> {
             onHtml: () => _previewHtml(content),
             onShareHtml: () => _shareHtml(content),
             headerKeys: _headerKeys,
+            searchResult: _searchResult,
+            activeSearchIndex: _activeSearchIndex,
           ),
         );
       },
@@ -225,19 +229,29 @@ class _ReaderPageState extends ConsumerState<ReaderPage> {
     );
   }
 
-  Future<void> _showSearch(DocumentContent document) async {
-    final firstOffset = await showDialog<int>(
+  Future<void> _showSearch(DocumentContent document) {
+    return showDialog<void>(
       context: context,
-      builder: (context) => _DocumentSearchDialog(source: document.rawText),
-    );
-    if (firstOffset == null || !mounted || document.rawText.isEmpty) {
-      return;
-    }
-    final ratio = firstOffset / document.rawText.length;
-    await _scrollController.animateTo(
-      _scrollController.position.maxScrollExtent * ratio,
-      duration: const Duration(milliseconds: 280),
-      curve: Curves.easeOut,
+      barrierColor: Theme.of(context).colorScheme.scrim.withValues(alpha: 0.12),
+      builder: (context) => _DocumentSearchDialog(
+        source: document.rawText,
+        onMatchSelected: (result, index) {
+          if (!mounted || document.rawText.isEmpty) {
+            return;
+          }
+          setState(() {
+            _searchResult = result;
+            _activeSearchIndex = index;
+          });
+          final offset = result.offsets[index];
+          final ratio = offset / document.rawText.length;
+          _scrollController.animateTo(
+            _scrollController.position.maxScrollExtent * ratio,
+            duration: const Duration(milliseconds: 240),
+            curve: Curves.easeOut,
+          );
+        },
+      ),
     );
   }
 
@@ -376,9 +390,13 @@ class _ReaderPageState extends ConsumerState<ReaderPage> {
 }
 
 class _DocumentSearchDialog extends StatefulWidget {
-  const _DocumentSearchDialog({required this.source});
+  const _DocumentSearchDialog({
+    required this.source,
+    required this.onMatchSelected,
+  });
 
   final String source;
+  final void Function(DocumentSearchResult result, int index) onMatchSelected;
 
   @override
   State<_DocumentSearchDialog> createState() => _DocumentSearchDialogState();
@@ -388,9 +406,10 @@ class _DocumentSearchDialogState extends State<_DocumentSearchDialog> {
   final _controller = TextEditingController();
   final _search = const DocumentSearch();
   Timer? _debounce;
-  DocumentSearchResult _result = const DocumentSearchResult(count: 0);
+  DocumentSearchResult _result = const DocumentSearchResult();
   var _searching = false;
   var _requestId = 0;
+  var _activeIndex = 0;
 
   @override
   void dispose() {
@@ -410,9 +429,22 @@ class _DocumentSearchDialogState extends State<_DocumentSearchDialog> {
       }
       setState(() {
         _result = result;
+        _activeIndex = 0;
         _searching = false;
       });
+      if (result.count > 0) {
+        widget.onMatchSelected(result, 0);
+      }
     });
+  }
+
+  void _selectRelative(int delta) {
+    if (_result.count == 0) {
+      return;
+    }
+    final nextIndex = (_activeIndex + delta) % _result.count;
+    setState(() => _activeIndex = nextIndex);
+    widget.onMatchSelected(_result, nextIndex);
   }
 
   @override
@@ -431,7 +463,13 @@ class _DocumentSearchDialogState extends State<_DocumentSearchDialog> {
           const SizedBox(height: AtlasSpacing.sm),
           Align(
             alignment: Alignment.centerLeft,
-            child: Text(_searching ? '正在搜索…' : '找到 ${_result.count} 处'),
+            child: Text(
+              _searching
+                  ? '正在搜索…'
+                  : _result.count == 0
+                  ? '未找到结果'
+                  : '${_activeIndex + 1} / ${_result.count}',
+            ),
           ),
         ],
       ),
@@ -440,11 +478,15 @@ class _DocumentSearchDialogState extends State<_DocumentSearchDialog> {
           onPressed: () => Navigator.of(context).pop(),
           child: const Text('关闭'),
         ),
-        FilledButton(
-          onPressed: _result.firstOffset == null
-              ? null
-              : () => Navigator.of(context).pop(_result.firstOffset),
-          child: const Text('跳转首个'),
+        IconButton(
+          tooltip: '上一个',
+          onPressed: _result.count == 0 ? null : () => _selectRelative(-1),
+          icon: const Icon(Icons.keyboard_arrow_up_rounded),
+        ),
+        IconButton.filled(
+          tooltip: '下一个',
+          onPressed: _result.count == 0 ? null : () => _selectRelative(1),
+          icon: const Icon(Icons.keyboard_arrow_down_rounded),
         ),
       ],
     );
@@ -522,6 +564,8 @@ class _ReaderScaffold extends StatelessWidget {
     required this.onHtml,
     required this.onShareHtml,
     required this.headerKeys,
+    required this.searchResult,
+    required this.activeSearchIndex,
   });
 
   final DocumentContent document;
@@ -536,6 +580,8 @@ class _ReaderScaffold extends StatelessWidget {
   final VoidCallback onHtml;
   final VoidCallback onShareHtml;
   final Map<String, List<GlobalKey>> headerKeys;
+  final DocumentSearchResult searchResult;
+  final int activeSearchIndex;
 
   @override
   Widget build(BuildContext context) {
@@ -635,6 +681,7 @@ class _ReaderScaffold extends StatelessWidget {
                 settings: settings,
                 onAiExplain: onAiExplain,
                 headerKeys: headerKeys,
+                searchHighlight: _searchHighlightForRange(range),
               ),
             ),
           ),
@@ -668,8 +715,8 @@ class _ReaderScaffold extends StatelessWidget {
                       context,
                       selectableRegionState,
                     ),
-                child: Text(
-                  document.paragraphs[index],
+                child: Text.rich(
+                  _plainTextSpan(context, index),
                   style: bodyStyle(context),
                 ),
               ),
@@ -678,6 +725,79 @@ class _ReaderScaffold extends StatelessWidget {
         );
       },
     );
+  }
+
+  ReaderSearchHighlight? _searchHighlightForRange(DocumentRange range) {
+    if (searchResult.query.isEmpty || searchResult.count == 0) {
+      return null;
+    }
+    final offsets = searchResult.offsets;
+    final firstInRange = offsets.indexWhere(
+      (offset) => offset >= range.start && offset < range.end,
+    );
+    if (firstInRange < 0) {
+      return null;
+    }
+    final activeOffset = offsets[activeSearchIndex];
+    final activeOccurrence =
+        activeOffset >= range.start && activeOffset < range.end
+        ? activeSearchIndex - firstInRange
+        : null;
+    return ReaderSearchHighlight(
+      query: searchResult.query,
+      activeOccurrence: activeOccurrence,
+    );
+  }
+
+  TextSpan _plainTextSpan(BuildContext context, int paragraphIndex) {
+    final text = document.paragraphs[paragraphIndex];
+    if (searchResult.query.isEmpty || searchResult.count == 0) {
+      return TextSpan(text: text);
+    }
+
+    var cursor = 0;
+    var paragraphStart = -1;
+    for (var index = 0; index <= paragraphIndex; index += 1) {
+      final paragraph = document.paragraphs[index];
+      paragraphStart = document.rawText.indexOf(paragraph, cursor);
+      if (paragraphStart < 0) {
+        break;
+      }
+      cursor = paragraphStart + paragraph.length;
+    }
+    final activeOffset = searchResult.offsets[activeSearchIndex];
+    final activeLocalOffset = paragraphStart >= 0
+        ? activeOffset - paragraphStart
+        : null;
+    final query = searchResult.query;
+    final lowerText = text.toLowerCase();
+    final lowerQuery = query.toLowerCase();
+    final scheme = Theme.of(context).colorScheme;
+    final spans = <InlineSpan>[];
+    var start = 0;
+    while (start < text.length) {
+      final match = lowerText.indexOf(lowerQuery, start);
+      if (match < 0) {
+        spans.add(TextSpan(text: text.substring(start)));
+        break;
+      }
+      if (match > start) {
+        spans.add(TextSpan(text: text.substring(start, match)));
+      }
+      final isActive = match == activeLocalOffset;
+      spans.add(
+        TextSpan(
+          text: text.substring(match, match + query.length),
+          style: TextStyle(
+            backgroundColor:
+                (isActive ? scheme.primaryContainer : scheme.tertiaryContainer)
+                    .withValues(alpha: isActive ? 0.46 : 0.2),
+          ),
+        ),
+      );
+      start = match + query.length;
+    }
+    return TextSpan(children: spans);
   }
 
   Widget _buildPlainTextSelectionToolbar(

@@ -8,7 +8,7 @@ class DocumentSearch {
   Future<DocumentSearchResult> search(String source, String query) {
     final normalized = query.trim();
     if (normalized.isEmpty) {
-      return Future.value(const DocumentSearchResult(count: 0));
+      return Future.value(const DocumentSearchResult());
     }
     final request = _SearchRequest(source: source, query: normalized);
     if (source.length < backgroundSearchThreshold) {
@@ -19,10 +19,13 @@ class DocumentSearch {
 }
 
 class DocumentSearchResult {
-  const DocumentSearchResult({required this.count, this.firstOffset});
+  const DocumentSearchResult({this.query = '', this.offsets = const []});
 
-  final int count;
-  final int? firstOffset;
+  final String query;
+  final List<int> offsets;
+
+  int get count => offsets.length;
+  int? get firstOffset => offsets.firstOrNull;
 }
 
 class _SearchRequest {
@@ -37,11 +40,9 @@ DocumentSearchResult _searchDocument(_SearchRequest request) {
     RegExp.escape(request.query),
     caseSensitive: false,
   ).allMatches(request.source);
-  var count = 0;
-  int? firstOffset;
+  final offsets = <int>[];
   for (final match in matches) {
-    firstOffset ??= match.start;
-    count += 1;
+    offsets.add(match.start);
   }
-  return DocumentSearchResult(count: count, firstOffset: firstOffset);
+  return DocumentSearchResult(query: request.query, offsets: offsets);
 }
