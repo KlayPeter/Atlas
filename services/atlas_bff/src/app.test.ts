@@ -2,6 +2,8 @@ import { describe, expect, test } from 'bun:test';
 
 import { createApp } from './app';
 import { resetAiGuardForTests } from './middleware/ai_guard';
+import { htmlEnhanceResultSchema } from './modules/ai/contracts';
+import { parseStructuredResponse } from './modules/ai/ai_provider';
 import { explainPrompt, htmlEnhancePrompt } from './modules/ai/prompts';
 
 describe('atlas bff', () => {
@@ -145,8 +147,31 @@ describe('atlas bff', () => {
     const summaryPrompt = htmlEnhancePrompt({ ...explainBody, mode: 'summary' });
     const originalPrompt = htmlEnhancePrompt({ ...explainBody, mode: 'original' });
 
-    expect(summaryPrompt).toContain('总结全文');
+    expect(summaryPrompt).toContain('总结所提供的文档内容');
     expect(originalPrompt).toContain('不要改写原文主体');
+    expect(summaryPrompt).toContain('不可信数据');
+  });
+
+  test('validates structured html enhancement responses', () => {
+    const result = parseStructuredResponse(
+      JSON.stringify({
+        title: 'Atlas',
+        lead: '导读',
+        summary: '摘要',
+        sections: [],
+        keyConcepts: [],
+        questions: [],
+      }),
+      htmlEnhanceResultSchema,
+    );
+
+    expect(result.title).toBe('Atlas');
+    expect(() =>
+      parseStructuredResponse('{"title":"Atlas"}', htmlEnhanceResultSchema),
+    ).toThrow('结构化内容缺少必要字段');
+    expect(() =>
+      parseStructuredResponse('not-json', htmlEnhanceResultSchema),
+    ).toThrow('不是合法 JSON');
   });
 
   test('rejects oversized ai request bodies', async () => {

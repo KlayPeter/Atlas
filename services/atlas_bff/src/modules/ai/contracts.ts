@@ -33,9 +33,67 @@ export const htmlEnhanceRequestSchema = z.object({
   context: documentContextSchema,
 });
 
+export const generatedStudyQuestionsSchema = z
+  .object({
+    questions: z
+      .array(
+        z
+          .object({
+            question: z.string().min(1).max(500),
+            referenceAnswer: z.string().min(1).max(2000),
+          })
+          .strict(),
+      )
+      .min(3)
+      .max(5),
+  })
+  .strict();
+
+export const htmlEnhanceResultSchema = z
+  .object({
+    title: z.string().min(1).max(240),
+    lead: z.string().min(1).max(800),
+    summary: z.string().min(1).max(4000),
+    sections: z
+      .array(
+        z
+          .object({
+            title: z.string().min(1).max(240),
+            content: z.string().min(1).max(2000),
+          })
+          .strict(),
+      )
+      .max(20),
+    keyConcepts: z
+      .array(
+        z
+          .object({
+            term: z.string().min(1).max(120),
+            definition: z.string().min(1).max(1000),
+          })
+          .strict(),
+      )
+      .max(20),
+    questions: z
+      .array(
+        z
+          .object({
+            q: z.string().min(1).max(500),
+            a: z.string().min(1).max(2000),
+          })
+          .strict(),
+      )
+      .max(10),
+  })
+  .strict();
+
 export type DocumentContext = z.infer<typeof documentContextSchema>;
 export type ExplainRequest = z.infer<typeof explainRequestSchema>;
 export type SummarizeRequest = z.infer<typeof summarizeRequestSchema>;
 export type AskRequest = z.infer<typeof askRequestSchema>;
 export type StudyRequest = z.infer<typeof studyRequestSchema>;
 export type HtmlEnhanceRequest = z.infer<typeof htmlEnhanceRequestSchema>;
+export type GeneratedStudyQuestions = z.infer<
+  typeof generatedStudyQuestionsSchema
+>;
+export type HtmlEnhanceResult = z.infer<typeof htmlEnhanceResultSchema>;

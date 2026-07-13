@@ -1,10 +1,26 @@
 import OpenAI from 'openai';
 import { isIP } from 'node:net';
+import { z } from 'zod';
 
 import { env } from '../../shared/env';
 import { AppError } from '../../shared/app_error';
-import type { AskRequest, ExplainRequest, SummarizeRequest } from './contracts';
-import { askPrompt, explainPrompt, summarizePrompt } from './prompts';
+import {
+  generatedStudyQuestionsSchema,
+  htmlEnhanceResultSchema,
+  type AskRequest,
+  type ExplainRequest,
+  type HtmlEnhanceRequest,
+  type HtmlEnhanceResult,
+  type StudyRequest,
+  type SummarizeRequest,
+} from './contracts';
+import {
+  askPrompt,
+  explainPrompt,
+  htmlEnhancePrompt,
+  studyPrompt,
+  summarizePrompt,
+} from './prompts';
 
 export type ExplainResult = {
   title: string;
@@ -27,8 +43,11 @@ export interface AiProvider {
   explain(request: ExplainRequest): Promise<ExplainResult>;
   summarize(request: SummarizeRequest): Promise<SummaryResult>;
   ask(request: AskRequest): Promise<AskResult>;
-  generateStudyQuestions(request: any): Promise<any>;
-  enhanceHtml(request: any): Promise<any>;
+  generateStudyQuestions(request: StudyRequest): Promise<{
+    difficulty: StudyRequest['difficulty'];
+    questions: Array<{ question: string; referenceAnswer: string }>;
+  }>;
+  enhanceHtml(request: HtmlEnhanceRequest): Promise<HtmlEnhanceResult>;
 }
 
 export interface AiConfig {
@@ -193,35 +212,16 @@ class OpenAiProvider implements AiProvider {
     };
   }
 
-  async generateStudyQuestions(request: any): Promise<any> {
-    const promptStr = require('./prompts').studyPrompt(request);
-    const jsonStr = await this.completeJson(promptStr);
-    try {
-      const parsed = JSON.parse(jsonStr);
-      return {
-        difficulty: request.difficulty,
-        questions: parsed.questions ?? [],
-      };
-    } catch (e) {
-      return { difficulty: request.difficulty, questions: [] };
-    }
+  async generateStudyQuestions(request: StudyRequest) {
+    const parsed = await this.completeJson(
+      studyPrompt(request),
+      generatedStudyQuestionsSchema,
+    );
+    return { difficulty: request.difficulty, questions: parsed.questions };
   }
 
-  async enhanceHtml(request: any): Promise<any> {
-    const promptStr = require('./prompts').htmlEnhancePrompt(request);
-    const jsonStr = await this.completeJson(promptStr);
-    try {
-      return JSON.parse(jsonStr);
-    } catch (e) {
-      return {
-        title: request.context.title,
-        lead: '',
-        summary: '',
-        sections: [],
-        keyConcepts: [],
-        questions: [],
-      };
-    }
+  async enhanceHtml(request: HtmlEnhanceRequest): Promise<HtmlEnhanceResult> {
+    return this.completeJson(htmlEnhancePrompt(request), htmlEnhanceResultSchema);
   }
 
   private async complete(prompt: string) {
@@ -232,18 +232,46 @@ class OpenAiProvider implements AiProvider {
     return response.choices[0].message.content ?? '';
   }
 
-  private async completeJson(prompt: string) {
+  private async completeJson<T>(prompt: string, schema: z.ZodType<T>) {
     const response = await this.client.chat.completions.create({
       model: this.model,
       messages: [{ role: 'user', content: prompt }],
+      response_format: { type: 'json_object' },
     });
-    let content = response.choices[0].message.content ?? '{}';
-    const match = content.match(/```(?:json)?\s*([\s\S]*?)\s*```/);
-    if (match) {
-      content = match[1];
-    }
-    return content;
+    return parseStructuredResponse(
+      response.choices[0].message.content ?? '',
+      schema,
+    );
   }
+}
+
+export function parseStructuredResponse<T>(content: string, schema: z.ZodType<T>) {
+  const match = content.match(/```(?:json)?\s*([\s\S]*?)\s*```/);
+  const candidate = (match?.[1] ?? content).trim();
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(candidate);
+  } catch {
+    throw new AppError(
+      'AI_INVALID_RESPONSE',
+      'AI 返回的结构化内容不是合法 JSON，请重试或更换模型。',
+      502,
+    );
+  }
+
+  const result = schema.safeParse(parsed);
+  if (!result.success) {
+    throw new AppError(
+      'AI_INVALID_RESPONSE',
+      'AI 返回的结构化内容缺少必要字段，请重试或更换模型。',
+      502,
+      result.error.issues.map((issue) => ({
+        path: issue.path.join('.'),
+        message: issue.message,
+      })),
+    );
+  }
+  return result.data;
 }
 
 function extractPoints(text: string) {
