@@ -17,39 +17,26 @@ class HtmlExportService {
   const HtmlExportService();
 
   String buildHtml(DocumentContent document, {HtmlEnhanceResult? enhance}) {
-    final body = document.summary.kind == DocumentKind.markdown
-        ? markdown.markdownToHtml(
-            document.rawText,
-            extensionSet: markdown.ExtensionSet.gitHubWeb,
-          )
-        : document.paragraphs
-              .map((paragraph) => '<p>${htmlEscape.convert(paragraph)}</p>')
-              .join('\n');
-    final toc = document.sections
-        .map(
-          (section) =>
-              '<li class="level-${section.level}">${htmlEscape.convert(section.title)}</li>',
-        )
-        .join('\n');
+    final rendered = document.summary.kind == DocumentKind.markdown
+        ? _renderMarkdown(document.rawText)
+        : _renderPlainText(document.paragraphs);
 
-    final title = enhance?.title ?? document.summary.title;
+    final enhancedTitle = enhance?.title.trim();
+    final title = enhancedTitle == null || enhancedTitle.isEmpty
+        ? document.summary.title
+        : enhancedTitle;
 
     var enhanceHtmlStr = '';
     if (enhance != null) {
-      enhanceHtmlStr = '''
+      enhanceHtmlStr =
+          '''
       <div class="ai-enhance">
         <h2>AI 导读</h2>
-        <p><strong>${htmlEscape.convert(enhance.lead)}</strong></p>
-        <p>${htmlEscape.convert(enhance.summary)}</p>
-        ${enhance.sections.map((s) => '<h3>${htmlEscape.convert(s.title)}</h3><p>${htmlEscape.convert(s.content)}</p>').join('')}
-        <h3>核心概念</h3>
-        <ul>
-          ${enhance.keyConcepts.map((k) => '<li><strong>${htmlEscape.convert(k.term)}:</strong> ${htmlEscape.convert(k.definition)}</li>').join('')}
-        </ul>
-        <h3>思考题</h3>
-        <ul>
-          ${enhance.questions.map((q) => '<li><strong>Q:</strong> ${htmlEscape.convert(q.q)}<br><strong>A:</strong> ${htmlEscape.convert(q.a)}</li>').join('')}
-        </ul>
+        ${enhance.lead.trim().isEmpty ? '' : '<p class="lead"><strong>${htmlEscape.convert(enhance.lead)}</strong></p>'}
+        ${enhance.summary.trim().isEmpty ? '' : '<p>${htmlEscape.convert(enhance.summary)}</p>'}
+        ${enhance.sections.where((s) => s.title.trim().isNotEmpty || s.content.trim().isNotEmpty).map((s) => '<section><h3>${htmlEscape.convert(s.title)}</h3><p>${htmlEscape.convert(s.content)}</p></section>').join('')}
+        ${enhance.keyConcepts.isEmpty ? '' : '<h3>核心概念</h3><ul>${enhance.keyConcepts.map((k) => '<li><strong>${htmlEscape.convert(k.term)}：</strong>${htmlEscape.convert(k.definition)}</li>').join()}</ul>'}
+        ${enhance.questions.isEmpty ? '' : '<h3>思考题</h3><ul>${enhance.questions.map((q) => '<li><strong>问题：</strong>${htmlEscape.convert(q.q)}<br><strong>参考：</strong>${htmlEscape.convert(q.a)}</li>').join()}</ul>'}
       </div>
       ''';
     }
@@ -60,33 +47,53 @@ class HtmlExportService {
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src data: https:; style-src 'unsafe-inline'; font-src data:; script-src 'none'; connect-src 'none'; frame-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'">
+  <meta name="referrer" content="no-referrer">
   <title>${htmlEscape.convert(title)}</title>
   <style>
     :root { color-scheme: light dark; }
+    * { box-sizing: border-box; }
     body {
       margin: 0;
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      font-family: ui-serif, "Noto Serif CJK SC", "Source Han Serif SC", "Songti SC", serif;
       background: #f7f5ef;
       color: #1f2623;
-      line-height: 1.72;
+      font-size: 17px;
+      line-height: 1.82;
+      overflow-wrap: anywhere;
     }
-    main { max-width: 820px; margin: 0 auto; padding: 32px 20px 56px; }
-    h1, h2, h3, h4, h5, h6 { line-height: 1.25; margin-top: 1.7em; }
-    pre { overflow-x: auto; padding: 16px; border-radius: 8px; background: #17201d; color: #eef8f2; }
+    main { max-width: 760px; margin: 0 auto; padding: 40px 24px 72px; }
+    article > *:first-child { margin-top: 0; }
+    p { margin: 0.9em 0; }
+    h1, h2, h3, h4, h5, h6 { line-height: 1.35; margin: 1.8em 0 0.7em; scroll-margin-top: 24px; }
+    h1 { font-size: 2rem; letter-spacing: -0.02em; }
+    h2 { font-size: 1.45rem; border-bottom: 1px solid #cfd8d3; padding-bottom: 0.35em; }
+    h3 { font-size: 1.2rem; }
+    a { color: #326b64; text-underline-offset: 0.18em; }
+    pre { overflow-x: auto; padding: 16px; border-radius: 10px; background: #17201d; color: #eef8f2; line-height: 1.55; }
     code { font-family: "SFMono-Regular", Consolas, monospace; }
+    :not(pre) > code { padding: 0.15em 0.35em; border-radius: 4px; background: #e5ebe7; font-size: 0.9em; }
     blockquote { margin-left: 0; padding-left: 16px; border-left: 4px solid #7aa099; color: #4b5b57; }
     table { border-collapse: collapse; display: block; overflow-x: auto; }
     th, td { border: 1px solid #cfd8d3; padding: 8px 10px; }
     img { max-width: 100%; border-radius: 8px; }
     .toc { background: #ffffffa8; border: 1px solid #d8ded9; border-radius: 8px; padding: 16px 18px; }
+    .toc ol { margin-bottom: 0; }
     .toc li { margin: 4px 0; }
     .toc .level-2 { margin-left: 16px; }
     .toc .level-3, .toc .level-4, .toc .level-5, .toc .level-6 { margin-left: 28px; }
+    .ai-enhance { margin: 1.5em 0; padding: 20px; border: 1px solid #cbd9d4; border-radius: 12px; background: #edf4f1; }
+    .ai-enhance h2 { margin-top: 0; }
+    .ai-enhance .lead { font-size: 1.05em; }
+    @media (max-width: 600px) { body { font-size: 16px; } main { padding: 24px 18px 48px; } }
     @media (prefers-color-scheme: dark) {
       body { background: #101614; color: #e3ebe7; }
       .toc { background: #18211e; border-color: #31413c; }
+      .ai-enhance { background: #17221f; border-color: #31413c; }
       blockquote { color: #b8c9c3; }
       th, td { border-color: #34443f; }
+      :not(pre) > code { background: #25312d; }
+      a { color: #8fc7bd; }
     }
   </style>
 </head>
@@ -94,15 +101,106 @@ class HtmlExportService {
   <main>
     <h1>${htmlEscape.convert(title)}</h1>
     $enhanceHtmlStr
-    ${toc.isEmpty ? '' : '<nav class="toc"><strong>目录</strong><ol>$toc</ol></nav>'}
-    <article>$body</article>
+    ${rendered.toc.isEmpty ? '' : '<nav class="toc" aria-label="文档目录"><strong>目录</strong><ol>${rendered.toc}</ol></nav>'}
+    <article>${rendered.body}</article>
   </main>
 </body>
 </html>
 ''';
   }
 
-  Future<File> writeHtml(DocumentContent document, {HtmlEnhanceResult? enhance}) async {
+  _RenderedDocument _renderMarkdown(String source) {
+    final parser = markdown.Document(
+      extensionSet: markdown.ExtensionSet.gitHubWeb,
+    );
+    final nodes = parser.parse(source);
+    final headings = <_HtmlHeading>[];
+    _prepareNodes(nodes, headings);
+    final toc = headings
+        .map(
+          (heading) =>
+              '<li class="level-${heading.level}"><a href="#${heading.id}">${htmlEscape.convert(heading.title)}</a></li>',
+        )
+        .join('\n');
+    return _RenderedDocument(
+      body: markdown.renderToHtml(nodes, enableTagfilter: true),
+      toc: toc,
+    );
+  }
+
+  _RenderedDocument _renderPlainText(List<String> paragraphs) {
+    final body = paragraphs
+        .map((paragraph) => '<p>${htmlEscape.convert(paragraph)}</p>')
+        .join('\n');
+    return _RenderedDocument(body: body, toc: '');
+  }
+
+  void _prepareNodes(List<markdown.Node> nodes, List<_HtmlHeading> headings) {
+    for (final node in nodes) {
+      if (node is! markdown.Element) {
+        continue;
+      }
+
+      final level = node.tag.length == 2 && node.tag.startsWith('h')
+          ? int.tryParse(node.tag.substring(1))
+          : null;
+      if (level != null && level >= 1 && level <= 6) {
+        final id = 'section-${headings.length + 1}';
+        node.generatedId = id;
+        headings.add(
+          _HtmlHeading(id: id, title: node.textContent, level: level),
+        );
+      } else if (node.tag == 'a') {
+        _prepareLink(node);
+      } else if (node.tag == 'img') {
+        _prepareImage(node);
+      }
+
+      final children = node.children;
+      if (children != null) {
+        _prepareNodes(children, headings);
+      }
+    }
+  }
+
+  void _prepareLink(markdown.Element element) {
+    final href = element.attributes['href']?.trim() ?? '';
+    final normalized = href.toLowerCase();
+    final safe =
+        normalized.startsWith('https://') ||
+        normalized.startsWith('http://') ||
+        normalized.startsWith('mailto:') ||
+        href.startsWith('#');
+    if (!safe) {
+      element.attributes.remove('href');
+      element.attributes.remove('title');
+      return;
+    }
+    if (normalized.startsWith('https://') || normalized.startsWith('http://')) {
+      element.attributes['target'] = '_blank';
+      element.attributes['rel'] = 'noopener noreferrer';
+    }
+  }
+
+  void _prepareImage(markdown.Element element) {
+    final source = element.attributes['src']?.trim() ?? '';
+    final normalized = source.toLowerCase();
+    final safeDataImage = RegExp(
+      r'^data:image/(?:png|jpe?g|gif|webp|svg\+xml);base64,',
+      caseSensitive: false,
+    ).hasMatch(source);
+    if (!normalized.startsWith('https://') && !safeDataImage) {
+      element.attributes.remove('src');
+    }
+    element.attributes['loading'] = 'lazy';
+    element.attributes['decoding'] = 'async';
+    element.attributes['referrerpolicy'] = 'no-referrer';
+  }
+
+  Future<File> writeHtml(
+    DocumentContent document, {
+    HtmlEnhanceResult? enhance,
+  }) async {
     final dir = await getApplicationDocumentsDirectory();
     final exportsDir = Directory('${dir.path}/exports');
     if (!await exportsDir.exists()) {
@@ -114,6 +212,28 @@ class HtmlExportService {
     final file = File(
       '${exportsDir.path}/${document.summary.id}-$safeTitle.html',
     );
-    return file.writeAsString(buildHtml(document, enhance: enhance), flush: true);
+    return file.writeAsString(
+      buildHtml(document, enhance: enhance),
+      flush: true,
+    );
   }
+}
+
+class _RenderedDocument {
+  const _RenderedDocument({required this.body, required this.toc});
+
+  final String body;
+  final String toc;
+}
+
+class _HtmlHeading {
+  const _HtmlHeading({
+    required this.id,
+    required this.title,
+    required this.level,
+  });
+
+  final String id;
+  final String title;
+  final int level;
 }
