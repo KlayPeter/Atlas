@@ -45,6 +45,7 @@ class ReaderMarkdownView extends StatelessWidget {
     required this.settings,
     this.compact = false,
     this.onAiExplain,
+    this.onAiTranslate,
     this.headerKeys,
     this.searchHighlight,
   });
@@ -53,6 +54,7 @@ class ReaderMarkdownView extends StatelessWidget {
   final ReadingSettings settings;
   final bool compact;
   final void Function(String text, Offset anchor)? onAiExplain;
+  final void Function(String text, Offset anchor)? onAiTranslate;
   final Map<String, List<GlobalKey>>? headerKeys;
   final ReaderSearchHighlight? searchHighlight;
 
@@ -87,7 +89,7 @@ class ReaderMarkdownView extends StatelessWidget {
       styleSheet: styleSheet,
       useEnhancedComponents: true,
       selectable: true,
-      contextMenuBuilder: onAiExplain == null
+      contextMenuBuilder: onAiExplain == null && onAiTranslate == null
           ? null
           : (context, selectableRegionState) =>
                 _buildSelectionToolbar(context, selectableRegionState),
@@ -167,32 +169,36 @@ class ReaderMarkdownView extends StatelessWidget {
         )
         .toList();
 
+    void runSelectionAction(void Function(String text, Offset anchor)? action) {
+      final innerState = selectableRegionState.innerRegionState;
+      final delegate =
+          selectableRegionState.registrar as SelectionContainerDelegate?;
+      String selectedText =
+          delegate?.getSelectedContent()?.plainText.trim() ?? '';
+      if (selectedText.isEmpty || selectedText == '_') {
+        // ignore: deprecated_member_use
+        final textValue = innerState?.textEditingValue;
+        selectedText =
+            textValue?.selection.textInside(textValue.text).trim() ?? '';
+      }
+      final anchor = selectableRegionState.contextMenuAnchors.primaryAnchor;
+      innerState?.hideToolbar();
+      if (selectedText.isNotEmpty) {
+        action?.call(selectedText, anchor);
+      }
+    }
+
     return AdaptiveTextSelectionToolbar.buttonItems(
       anchors: selectableRegionState.contextMenuAnchors,
       buttonItems: [
         ...copyButtons,
         ContextMenuButtonItem(
           label: 'AI 解释',
-          onPressed: () {
-            final innerState = selectableRegionState.innerRegionState;
-            final delegate =
-                selectableRegionState.registrar as SelectionContainerDelegate?;
-            String selectedText =
-                delegate?.getSelectedContent()?.plainText.trim() ?? '';
-
-            if (selectedText.isEmpty || selectedText == '_') {
-              // ignore: deprecated_member_use
-              final textValue = innerState?.textEditingValue;
-              selectedText =
-                  textValue?.selection.textInside(textValue.text).trim() ?? '';
-            }
-            final anchor =
-                selectableRegionState.contextMenuAnchors.primaryAnchor;
-            innerState?.hideToolbar();
-            if (selectedText.isNotEmpty) {
-              onAiExplain?.call(selectedText, anchor);
-            }
-          },
+          onPressed: () => runSelectionAction(onAiExplain),
+        ),
+        ContextMenuButtonItem(
+          label: '翻译',
+          onPressed: () => runSelectionAction(onAiTranslate),
         ),
       ],
     );

@@ -40,6 +40,42 @@ void main() {
     expect(headers['x-ai-provider-model'], 'deepseek-v4-pro');
   });
 
+  test('selection translation sends the dedicated translate mode', () async {
+    SharedPreferences.setMockInitialValues({});
+    final secureStore = MemorySecureValueStore()
+      ..values['atlas.secure.deviceToken'] = 'device-token';
+    final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+    addTearDown(() async => server.close(force: true));
+    Map<String, dynamic>? requestBody;
+
+    server.listen((request) async {
+      requestBody = jsonDecode(await utf8.decoder.bind(request).join());
+      _writeJson(request.response, {
+        'ok': true,
+        'data': {'title': '翻译', 'explanation': 'Local-first reader'},
+      });
+    });
+
+    final client = AiApiClient(
+      Dio(),
+      defaultBffUrl: 'http://${server.address.host}:${server.port}',
+      secrets: AiSecretsRepository(secureStore),
+    );
+    final result = await client.translate(
+      context: const AiDocumentContext(
+        documentId: 'doc-1',
+        title: 'Atlas',
+        outline: '',
+        excerpt: 'Atlas 是本地优先阅读器。',
+      ),
+      selectedText: '本地优先阅读器',
+    );
+
+    expect(requestBody?['mode'], 'translate');
+    expect(requestBody?['selectedText'], '本地优先阅读器');
+    expect(result.body, 'Local-first reader');
+  });
+
   test(
     'refreshes device token once when BFF rejects the cached token',
     () async {

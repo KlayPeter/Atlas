@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../app/theme/app_theme.dart';
 import '../../../domain/document/document_content.dart';
+import '../application/ai_document_workflows.dart';
 import '../application/ai_models.dart';
 import '../data/ai_api_client.dart';
 import '../data/ai_history_repository.dart';
@@ -30,6 +31,7 @@ class _AiPanelState extends ConsumerState<AiPanel> {
   var _loading = false;
   var _isStudyMode = false;
   var _disposed = false;
+  String? _loadingLabel;
 
   @override
   void initState() {
@@ -94,6 +96,13 @@ class _AiPanelState extends ConsumerState<AiPanel> {
               ],
             ),
             const SizedBox(height: AtlasSpacing.sm),
+            Text(
+              '先选一个阅读任务，也可以直接提出基于全文的问题。',
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
+              ),
+            ),
+            const SizedBox(height: AtlasSpacing.sm),
             Wrap(
               spacing: AtlasSpacing.sm,
               runSpacing: AtlasSpacing.sm,
@@ -125,8 +134,38 @@ class _AiPanelState extends ConsumerState<AiPanel> {
               ),
               onSubmitted: (_) => _ask(),
             ),
+            const SizedBox(height: AtlasSpacing.sm),
+            Wrap(
+              spacing: AtlasSpacing.xs,
+              runSpacing: AtlasSpacing.xs,
+              children: [
+                for (final suggestion in const [
+                  '这篇文章的核心结论是什么？',
+                  '有哪些关键概念？',
+                  '作者的论证链路是什么？',
+                ])
+                  ActionChip(
+                    label: Text(suggestion),
+                    onPressed: _loading
+                        ? null
+                        : () {
+                            _questionController.text = suggestion;
+                            _ask();
+                          },
+                  ),
+              ],
+            ),
             const SizedBox(height: AtlasSpacing.md),
-            if (_loading) const LinearProgressIndicator(),
+            if (_loading) ...[
+              const LinearProgressIndicator(),
+              if (_loadingLabel != null) ...[
+                const SizedBox(height: AtlasSpacing.xs),
+                Text(
+                  _loadingLabel!,
+                  style: Theme.of(context).textTheme.bodySmall,
+                ),
+              ],
+            ],
             if (_error != null)
               Builder(
                 builder: (context) {
@@ -141,7 +180,7 @@ class _AiPanelState extends ConsumerState<AiPanel> {
                     child: Padding(
                       padding: const EdgeInsets.all(AtlasSpacing.sm),
                       child: Text(
-                        '$msg\n\n请到设置里的 AI 模型配置检查 Atlas BFF 地址、API Key、Base URL 和模型名称。',
+                        msg,
                         style: TextStyle(
                           color: Theme.of(context).colorScheme.onErrorContainer,
                         ),
@@ -200,9 +239,11 @@ class _AiPanelState extends ConsumerState<AiPanel> {
     required String prompt,
     required Future<AiResult> Function() action,
     bool forceRefresh = false,
+    String loadingLabel = '正在生成…',
   }) async {
     setState(() {
       _loading = true;
+      _loadingLabel = loadingLabel;
       _error = null;
     });
     try {
@@ -216,7 +257,7 @@ class _AiPanelState extends ConsumerState<AiPanel> {
         );
       }
       final result = cached?.result ?? await action();
-      
+
       // Save or update cache
       await historyRepository.save(
         documentId: widget.document.summary.id,
@@ -224,10 +265,14 @@ class _AiPanelState extends ConsumerState<AiPanel> {
         prompt: prompt,
         result: result,
       );
-      
+
       // Load history to get the updated entry with ID
-      final newHistory = await historyRepository.listForDocument(widget.document.summary.id);
-      final entry = newHistory.where((e) => e.kind == kind && e.prompt == prompt).firstOrNull;
+      final newHistory = await historyRepository.listForDocument(
+        widget.document.summary.id,
+      );
+      final entry = newHistory
+          .where((e) => e.kind == kind && e.prompt == prompt)
+          .firstOrNull;
 
       if (mounted) {
         setState(() {
@@ -237,10 +282,15 @@ class _AiPanelState extends ConsumerState<AiPanel> {
         });
       }
     } catch (error) {
-      setState(() => _error = error);
+      if (mounted) {
+        setState(() => _error = error);
+      }
     } finally {
       if (mounted) {
-        setState(() => _loading = false);
+        setState(() {
+          _loading = false;
+          _loadingLabel = null;
+        });
       }
     }
   }
@@ -261,9 +311,16 @@ class _AiPanelState extends ConsumerState<AiPanel> {
   Future<void> _summarize({bool forceRefresh = false}) {
     return _run(
       kind: AiHistoryKind.summary,
-      prompt: '全文总结',
-      action: () => ref.read(aiApiClientProvider).summarize(_context),
+      prompt: '全文总结（分段覆盖）',
+      action: () {
+        final client = ref.read(aiApiClientProvider);
+        return summarizeFullDocument(
+          widget.document,
+          summarize: client.summarize,
+        );
+      },
       forceRefresh: forceRefresh,
+      loadingLabel: '正在分段阅读并生成全文总结…',
     );
   }
 
@@ -293,15 +350,21 @@ class _AiPanelState extends ConsumerState<AiPanel> {
     }
     setState(() {
       _loading = true;
+      _loadingLabel = '正在检索全文片段并组织答案…';
       _error = null;
       _result = const AiResult(title: '问答', body: '');
     });
     final buffer = StringBuffer();
     try {
-      await for (final chunk
-          in ref
-              .read(aiApiClientProvider)
-              .askStream(context: _context, question: question)) {
+      final client = ref.read(aiApiClientProvider);
+      await for (final chunk in askFullDocument(
+        widget.document,
+        question,
+        ask: (context, question) =>
+            client.ask(context: context, question: question),
+        askStream: (context, question) =>
+            client.askStream(context: context, question: question),
+      )) {
         if (_disposed) {
           break;
         }
@@ -323,10 +386,15 @@ class _AiPanelState extends ConsumerState<AiPanel> {
           );
       await _loadHistory();
     } catch (error) {
-      setState(() => _error = error);
+      if (mounted) {
+        setState(() => _error = error);
+      }
     } finally {
       if (mounted) {
-        setState(() => _loading = false);
+        setState(() {
+          _loading = false;
+          _loadingLabel = null;
+        });
       }
     }
   }
@@ -340,11 +408,14 @@ class _AiResultView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final uniquePoints = result.points
+        .where((point) => !result.body.contains(point))
+        .toList(growable: false);
     final markdown = [
       result.body,
-      if (result.points.isNotEmpty) ...[
+      if (uniquePoints.isNotEmpty) ...[
         '',
-        ...result.points.map((point) => '- $point'),
+        ...uniquePoints.map((point) => '- $point'),
       ],
     ].join('\n');
 

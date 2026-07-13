@@ -112,6 +112,8 @@ class _ReaderPageState extends ConsumerState<ReaderPage> {
             onAi: () => _showAi(content),
             onAiExplain: (text, anchor) =>
                 _showInlineExplanation(content, text, anchor),
+            onAiTranslate: (text, anchor) =>
+                _showInlineExplanation(content, text, anchor, translate: true),
             onSettings: () => _showSettings(readingSettings),
             onHtml: () => _previewHtml(content),
             onShareHtml: () => _shareHtml(content),
@@ -260,28 +262,31 @@ class _ReaderPageState extends ConsumerState<ReaderPage> {
       context: context,
       isScrollControlled: true,
       showDragHandle: true,
-      builder: (context) =>
-          AiPanel(document: document, initialSelection: initialSelection),
+      builder: (context) => SizedBox(
+        height: MediaQuery.sizeOf(context).height * 0.9,
+        child: AiPanel(document: document, initialSelection: initialSelection),
+      ),
     );
   }
 
   void _showInlineExplanation(
     DocumentContent document,
     String selectedText,
-    Offset anchor,
-  ) {
+    Offset anchor, {
+    bool translate = false,
+  }) {
     _inlineExplanationOverlay?.remove();
-    final result = ref
-        .read(aiApiClientProvider)
-        .explain(
-          context: AiDocumentContext.fromDocument(document),
-          selectedText: selectedText,
-        );
+    final client = ref.read(aiApiClientProvider);
+    final aiContext = AiDocumentContext.fromDocument(document);
+    final result = translate
+        ? client.translate(context: aiContext, selectedText: selectedText)
+        : client.explain(context: aiContext, selectedText: selectedText);
 
     _inlineExplanationOverlay = OverlayEntry(
       builder: (context) => _InlineExplanationOverlay(
         anchor: anchor,
         selectedText: selectedText,
+        title: translate ? '划词翻译' : 'AI 解释',
         result: result,
         onClose: _hideInlineExplanation,
       ),
@@ -560,6 +565,7 @@ class _ReaderScaffold extends StatelessWidget {
     required this.onSearch,
     required this.onAi,
     required this.onAiExplain,
+    required this.onAiTranslate,
     required this.onSettings,
     required this.onHtml,
     required this.onShareHtml,
@@ -576,6 +582,7 @@ class _ReaderScaffold extends StatelessWidget {
   final VoidCallback onSearch;
   final VoidCallback onAi;
   final void Function(String text, Offset anchor) onAiExplain;
+  final void Function(String text, Offset anchor) onAiTranslate;
   final VoidCallback onSettings;
   final VoidCallback onHtml;
   final VoidCallback onShareHtml;
@@ -680,6 +687,7 @@ class _ReaderScaffold extends StatelessWidget {
                 data: document.rawText.substring(range.start, range.end),
                 settings: settings,
                 onAiExplain: onAiExplain,
+                onAiTranslate: onAiTranslate,
                 headerKeys: headerKeys,
                 searchHighlight: _searchHighlightForRange(range),
               ),
@@ -808,25 +816,30 @@ class _ReaderScaffold extends StatelessWidget {
         .where((button) => button.type == ContextMenuButtonType.copy)
         .toList();
 
+    void runSelectionAction(void Function(String text, Offset anchor) action) {
+      // ignore: deprecated_member_use
+      final textValue = selectableRegionState.textEditingValue;
+      final selectedText = textValue.selection
+          .textInside(textValue.text)
+          .trim();
+      final anchor = selectableRegionState.contextMenuAnchors.primaryAnchor;
+      selectableRegionState.hideToolbar();
+      if (selectedText.isNotEmpty) {
+        action(selectedText, anchor);
+      }
+    }
+
     return AdaptiveTextSelectionToolbar.buttonItems(
       anchors: selectableRegionState.contextMenuAnchors,
       buttonItems: [
         ...copyButtons,
         ContextMenuButtonItem(
           label: 'AI 解释',
-          onPressed: () {
-            // ignore: deprecated_member_use
-            final textValue = selectableRegionState.textEditingValue;
-            final selectedText = textValue.selection
-                .textInside(textValue.text)
-                .trim();
-            final anchor =
-                selectableRegionState.contextMenuAnchors.primaryAnchor;
-            selectableRegionState.hideToolbar();
-            if (selectedText.isNotEmpty) {
-              onAiExplain(selectedText, anchor);
-            }
-          },
+          onPressed: () => runSelectionAction(onAiExplain),
+        ),
+        ContextMenuButtonItem(
+          label: '翻译',
+          onPressed: () => runSelectionAction(onAiTranslate),
         ),
       ],
     );
@@ -837,12 +850,14 @@ class _InlineExplanationOverlay extends StatelessWidget {
   const _InlineExplanationOverlay({
     required this.anchor,
     required this.selectedText,
+    required this.title,
     required this.result,
     required this.onClose,
   });
 
   final Offset anchor;
   final String selectedText;
+  final String title;
   final Future<AiResult> result;
   final VoidCallback onClose;
 
@@ -879,7 +894,7 @@ class _InlineExplanationOverlay extends StatelessWidget {
                       children: [
                         Expanded(
                           child: Text(
-                            'AI 解释',
+                            title,
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                             style: Theme.of(context).textTheme.titleSmall,
@@ -940,7 +955,7 @@ class _InlineExplanationOverlay extends StatelessWidget {
                               child: Padding(
                                 padding: const EdgeInsets.all(AtlasSpacing.sm),
                                 child: Text(
-                                  '$message\n\n请到设置里的 AI 模型配置检查 Atlas BFF 地址、API Key、Base URL 和模型名称。',
+                                  message,
                                   style: TextStyle(
                                     color: Theme.of(
                                       context,

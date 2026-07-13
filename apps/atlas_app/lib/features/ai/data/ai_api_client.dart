@@ -47,6 +47,7 @@ class AiApiClient {
   }) async {
     final response = await _post('/v1/ai/explain', {
       'selectedText': selectedText,
+      'mode': 'explain',
       'context': context.toJson(),
     });
     final data = response['data'] as Map<String, Object?>;
@@ -54,6 +55,22 @@ class AiApiClient {
       title: data['title'] as String? ?? '解释',
       body: data['explanation'] as String? ?? '',
       points: (data['points'] as List?)?.cast<String>() ?? const [],
+    );
+  }
+
+  Future<AiResult> translate({
+    required AiDocumentContext context,
+    required String selectedText,
+  }) async {
+    final response = await _post('/v1/ai/explain', {
+      'selectedText': selectedText,
+      'mode': 'translate',
+      'context': context.toJson(),
+    });
+    final data = response['data'] as Map<String, Object?>;
+    return AiResult(
+      title: data['title'] as String? ?? '翻译',
+      body: data['explanation'] as String? ?? '',
     );
   }
 
