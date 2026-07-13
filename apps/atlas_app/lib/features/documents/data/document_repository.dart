@@ -24,6 +24,8 @@ class DocumentRepository {
   static const _documentsKey = 'atlas.documents.v1';
   static const _offsetPrefix = 'atlas.readingOffset.';
   static const _contentPrefix = 'atlas.documentContent.';
+  static const maxImportBytes = 50 * 1024 * 1024;
+  static const backgroundParseThreshold = 256 * 1024;
 
   final DocumentParser _parser;
   final bool _usePreferencesForDocuments;
@@ -56,7 +58,7 @@ class DocumentRepository {
     if (rawText == null) {
       return null;
     }
-    final parsed = _parser.parse(rawText, summary.kind);
+    final parsed = await _parse(rawText, summary.kind);
     final repairedSummary = summary.wordCount == parsed.wordCount
         ? summary
         : summary.copyWith(wordCount: parsed.wordCount);
@@ -66,6 +68,7 @@ class DocumentRepository {
       rawText: parsed.rawText,
       sections: parsed.sections,
       paragraphs: parsed.paragraphs,
+      renderRanges: parsed.renderRanges,
     );
   }
 
@@ -102,6 +105,9 @@ class DocumentRepository {
       throw const DocumentImportFailure('Atlas 目前只支持 Markdown 和 TXT');
     }
 
+    final fileSize = await sourceFile.length();
+    _validateImportSize(fileSize);
+
     final bytes = await sourceFile.readAsBytes();
     return importBytes(
       bytes: bytes,
@@ -117,6 +123,7 @@ class DocumentRepository {
     if (!const {'md', 'markdown', 'txt'}.contains(extension)) {
       throw const DocumentImportFailure('Atlas 目前只支持 Markdown 和 TXT');
     }
+    _validateImportSize(bytes.length);
 
     final hash = sha256.convert(bytes).toString();
     final existing = await _findByHash(hash);
@@ -128,14 +135,15 @@ class DocumentRepository {
     final id = const Uuid().v4();
     final kind = DocumentKindLabel.fromExtension(extension);
     final safeTitle = originalName;
+    final rawText = utf8.decode(bytes, allowMalformed: true);
     final storedPath = await _storeDocumentBytes(
       id: id,
       kind: kind,
       bytes: bytes,
+      rawText: rawText,
     );
 
-    final rawText = utf8.decode(bytes, allowMalformed: true);
-    final parsed = _parser.parse(rawText, kind);
+    final parsed = await _parse(rawText, kind);
     final now = DateTime.now();
     final summary = DocumentSummary(
       id: id,
@@ -234,9 +242,8 @@ class DocumentRepository {
     required String id,
     required DocumentKind kind,
     required List<int> bytes,
+    required String rawText,
   }) async {
-    final rawText = utf8.decode(bytes, allowMalformed: true);
-
     if (kIsWeb || _usePreferencesForDocuments) {
       final prefs = await SharedPreferences.getInstance();
       await prefs.setString('$_contentPrefix$id', rawText);
@@ -251,6 +258,22 @@ class DocumentRepository {
     final storedPath = '${documentsDir.path}/$id.${kind.extension}';
     await File(storedPath).writeAsBytes(bytes, flush: true);
     return storedPath;
+  }
+
+  Future<ParsedDocument> _parse(String rawText, DocumentKind kind) {
+    if (rawText.length < backgroundParseThreshold) {
+      return Future.value(_parser.parse(rawText, kind));
+    }
+    return compute(
+      _parseDocumentInBackground,
+      _ParseDocumentRequest(rawText: rawText, kind: kind),
+    );
+  }
+
+  void _validateImportSize(int size) {
+    if (size > maxImportBytes) {
+      throw const DocumentImportFailure('文件超过 50 MB，请拆分后再导入');
+    }
   }
 
   Future<void> _deleteStoredDocument(DocumentSummary document) async {
@@ -269,6 +292,17 @@ class DocumentRepository {
       await file.delete();
     }
   }
+}
+
+class _ParseDocumentRequest {
+  const _ParseDocumentRequest({required this.rawText, required this.kind});
+
+  final String rawText;
+  final DocumentKind kind;
+}
+
+ParsedDocument _parseDocumentInBackground(_ParseDocumentRequest request) {
+  return const DocumentParser().parse(request.rawText, request.kind);
 }
 
 class DocumentImportCanceled implements Exception {

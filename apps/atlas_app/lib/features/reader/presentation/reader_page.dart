@@ -84,7 +84,7 @@ class _ReaderPageState extends ConsumerState<ReaderPage> {
         }
         final readingSettings =
             settings.asData?.value ?? const ReadingSettings();
-        
+
         return ValueListenableBuilder<bool>(
           valueListenable: _isExplanationVisible,
           builder: (context, isVisible, child) {
@@ -363,7 +363,8 @@ class _ReaderPageState extends ConsumerState<ReaderPage> {
         content: const Text('请选择你要预览的模式：'),
         actions: [
           TextButton(
-            onPressed: () => Navigator.of(context).pop(HtmlPreviewMode.original),
+            onPressed: () =>
+                Navigator.of(context).pop(HtmlPreviewMode.original),
             child: const Text('原文展示'),
           ),
           FilledButton(
@@ -587,27 +588,37 @@ class _ReaderScaffold extends StatelessWidget {
   }
 
   Widget _buildMarkdownBody(Color paperColor) {
-    return ListView(
+    final ranges = document.renderRanges.isEmpty && document.rawText.isNotEmpty
+        ? [DocumentRange(start: 0, end: document.rawText.length)]
+        : document.renderRanges;
+    return ListView.builder(
       controller: scrollController,
       padding: _readerPadding(),
-      cacheExtent: 900,
+      cacheExtent: 1200,
       keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
-      children: [
-        RepaintBoundary(
+      itemCount: ranges.length,
+      itemBuilder: (context, index) {
+        final range = ranges[index];
+        return RepaintBoundary(
           child: DecoratedBox(
             decoration: BoxDecoration(color: paperColor),
             child: Padding(
-              padding: const EdgeInsets.fromLTRB(8, 12, 8, 28),
+              padding: EdgeInsets.fromLTRB(
+                8,
+                index == 0 ? 12 : 0,
+                8,
+                index == ranges.length - 1 ? 28 : AtlasSpacing.sm,
+              ),
               child: ReaderMarkdownView(
-                data: document.rawText,
+                data: document.rawText.substring(range.start, range.end),
                 settings: settings,
                 onAiExplain: onAiExplain,
                 headerKeys: headerKeys,
               ),
             ),
           ),
-        ),
-      ],
+        );
+      },
     );
   }
 

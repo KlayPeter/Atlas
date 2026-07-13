@@ -42,12 +42,21 @@ class ParsedDocument {
     required this.wordCount,
     required this.sections,
     required this.paragraphs,
+    required this.renderRanges,
   });
 
   final String rawText;
   final int wordCount;
   final List<DocumentSection> sections;
   final List<String> paragraphs;
+  final List<DocumentRange> renderRanges;
+}
+
+class DocumentRange {
+  const DocumentRange({required this.start, required this.end});
+
+  final int start;
+  final int end;
 }
 
 class DocumentContent {
@@ -56,12 +65,14 @@ class DocumentContent {
     required this.rawText,
     required this.sections,
     required this.paragraphs,
+    this.renderRanges = const [],
   });
 
   final DocumentSummary summary;
   final String rawText;
   final List<DocumentSection> sections;
   final List<String> paragraphs;
+  final List<DocumentRange> renderRanges;
 
   String get outlineText {
     if (sections.isEmpty) {

@@ -18,7 +18,55 @@ class DocumentParser {
       wordCount: _countWords(normalized),
       sections: sections,
       paragraphs: _splitParagraphs(normalized),
+      renderRanges: kind == DocumentKind.markdown
+          ? _buildMarkdownRenderRanges(normalized)
+          : const [],
     );
+  }
+
+  List<DocumentRange> _buildMarkdownRenderRanges(String source) {
+    if (source.isEmpty) {
+      return const [];
+    }
+
+    const targetLength = 12000;
+    const hardLimit = targetLength * 2;
+    final ranges = <DocumentRange>[];
+    final lines = source.split('\n');
+    var chunkStart = 0;
+    var offset = 0;
+    String? fenceCharacter;
+
+    for (var index = 0; index < lines.length; index += 1) {
+      final line = lines[index];
+      final fence = RegExp(r'^\s*(`{3,}|~{3,})').firstMatch(line)?.group(1);
+      if (fence != null) {
+        final character = fence[0];
+        if (fenceCharacter == null) {
+          fenceCharacter = character;
+        } else if (fenceCharacter == character) {
+          fenceCharacter = null;
+        }
+      }
+
+      offset += line.length;
+      if (index < lines.length - 1) {
+        offset += 1;
+      }
+      final length = offset - chunkStart;
+      final safeBoundary =
+          fenceCharacter == null &&
+          (line.trim().isEmpty || length >= hardLimit);
+      if (length >= targetLength && safeBoundary) {
+        ranges.add(DocumentRange(start: chunkStart, end: offset));
+        chunkStart = offset;
+      }
+    }
+
+    if (chunkStart < source.length) {
+      ranges.add(DocumentRange(start: chunkStart, end: source.length));
+    }
+    return ranges;
   }
 
   List<DocumentSection> _parseMarkdownSections(String source) {
@@ -75,16 +123,18 @@ class DocumentParser {
     var offset = 0;
     for (var index = 0; index < paragraphs.length; index += 8) {
       final title = '第 ${sections.length + 1} 节';
+      final paragraphOffset = source.indexOf(paragraphs[index], offset);
+      final startOffset = paragraphOffset < 0 ? offset : paragraphOffset;
       sections.add(
         DocumentSection(
           id: 'section-${sections.length + 1}',
           title: title,
           level: 1,
-          startOffset: offset,
+          startOffset: startOffset,
           preview: paragraphs[index],
         ),
       );
-      offset = source.indexOf(paragraphs[index], offset);
+      offset = startOffset + paragraphs[index].length;
     }
     return sections;
   }

@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:atlas_app/domain/document/document_summary.dart';
 import 'package:atlas_app/features/documents/data/document_repository.dart';
@@ -60,5 +61,40 @@ void main() {
 
     expect(await repository.listDocuments(), isEmpty);
     expect(await repository.getDocument(document.id), isNull);
+  });
+
+  test('rejects oversized files before reading them into memory', () async {
+    final directory = await Directory.systemTemp.createTemp('atlas-test-');
+    addTearDown(() => directory.delete(recursive: true));
+    final file = File('${directory.path}/oversized.md');
+    await file.openWrite().close();
+    await file.open(mode: FileMode.write).then((handle) async {
+      await handle.truncate(DocumentRepository.maxImportBytes + 1);
+      await handle.close();
+    });
+
+    expect(
+      () => repository.importFile(file),
+      throwsA(
+        isA<DocumentImportFailure>().having(
+          (error) => error.message,
+          'message',
+          contains('50 MB'),
+        ),
+      ),
+    );
+  });
+
+  test('parses large documents off the main isolate path', () async {
+    final source = '# Large\n\n${'Atlas reads smoothly.\n\n' * 15000}';
+
+    final summary = await repository.importBytes(
+      bytes: utf8.encode(source),
+      originalName: 'large.md',
+    );
+    final content = await repository.getDocument(summary.id);
+
+    expect(content?.rawText, source);
+    expect(content?.renderRanges.length, greaterThan(1));
   });
 }
