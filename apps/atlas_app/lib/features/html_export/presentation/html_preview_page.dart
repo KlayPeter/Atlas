@@ -5,13 +5,17 @@ import 'package:webview_flutter/webview_flutter.dart';
 
 import '../../../app/theme/app_theme.dart';
 import '../../../domain/document/document_content.dart';
-import '../../ai/application/ai_models.dart';
-import '../../ai/data/ai_api_client.dart';
 import '../../documents/application/document_content_provider.dart';
-import '../application/html_export_service.dart';
+import '../application/html_preview_generator.dart';
+
+export '../application/html_preview_generator.dart' show HtmlPreviewMode;
 
 class HtmlPreviewPage extends ConsumerStatefulWidget {
-  const HtmlPreviewPage({super.key, required this.exportId, required this.mode});
+  const HtmlPreviewPage({
+    super.key,
+    required this.exportId,
+    required this.mode,
+  });
 
   final String? exportId;
   final HtmlPreviewMode mode;
@@ -56,7 +60,7 @@ class _HtmlPreviewPageState extends ConsumerState<HtmlPreviewPage> {
             return const _HtmlPreviewError(message: '找不到文档');
           }
           final controller = _controller;
-          
+
           if (!_hasStartedGeneration) {
             _hasStartedGeneration = true;
             WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -64,11 +68,11 @@ class _HtmlPreviewPageState extends ConsumerState<HtmlPreviewPage> {
             });
           }
 
-          if (_generating || controller == null) {
-            return const Center(child: CircularProgressIndicator());
-          }
           if (_errorMessage != null) {
             return _HtmlPreviewError(message: _errorMessage!);
+          }
+          if (_generating || controller == null) {
+            return const Center(child: CircularProgressIndicator());
           }
           return WebViewWidget(controller: controller);
         },
@@ -85,20 +89,14 @@ class _HtmlPreviewPageState extends ConsumerState<HtmlPreviewPage> {
     });
 
     try {
-      final enhance = await ref
-          .read(aiApiClientProvider)
-          .enhanceHtml(
-            context: AiDocumentContext.fromDocument(content),
-            mode: widget.mode.apiValue,
-          );
       final file = await ref
-          .read(htmlExportServiceProvider)
-          .writeHtml(content, enhance: enhance);
+          .read(htmlPreviewGeneratorProvider)
+          .generate(content, widget.mode);
       if (!mounted) {
         return;
       }
       final controller = WebViewController()
-        ..setJavaScriptMode(JavaScriptMode.unrestricted)
+        ..setJavaScriptMode(JavaScriptMode.disabled)
         ..loadFile(file.path);
       setState(() {
         _filePath = file.path;
@@ -111,20 +109,12 @@ class _HtmlPreviewPageState extends ConsumerState<HtmlPreviewPage> {
       }
       setState(() {
         _generating = false;
-        _errorMessage =
-            '生成失败：$error\n\n请到设置里的 AI 模型配置检查 Atlas BFF 地址、API Key、Base URL 和模型名称。';
+        _errorMessage = widget.mode.requiresAi
+            ? '生成失败：$error\n\n请检查 Atlas BFF 和 AI 模型配置。'
+            : '生成失败：$error';
       });
     }
   }
-}
-
-enum HtmlPreviewMode {
-  summary('summary'),
-  original('original');
-
-  const HtmlPreviewMode(this.apiValue);
-
-  final String apiValue;
 }
 
 class _HtmlPreviewError extends StatelessWidget {
