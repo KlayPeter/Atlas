@@ -6,6 +6,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../../domain/ai/study_models.dart';
 import '../application/ai_models.dart';
+import 'ai_secrets_repository.dart';
 
 const defaultAtlasBffUrl = String.fromEnvironment(
   'ATLAS_BFF_URL',
@@ -22,17 +23,22 @@ final aiApiClientProvider = Provider<AiApiClient>((ref) {
       ),
     ),
     defaultBffUrl: defaultAtlasBffUrl,
+    secrets: ref.read(aiSecretsRepositoryProvider),
   );
 });
 
 class AiApiClient {
-  AiApiClient(this._dio, {required this.defaultBffUrl});
+  AiApiClient(
+    this._dio, {
+    required this.defaultBffUrl,
+    required AiSecretsRepository secrets,
+  }) : _secrets = secrets;
 
-  static const _tokenKey = 'atlas.auth.deviceToken';
   static const _bffUrlKey = 'ai_settings_bff_url';
 
   final Dio _dio;
   final String defaultBffUrl;
+  final AiSecretsRepository _secrets;
 
   Future<AiResult> explain({
     required AiDocumentContext context,
@@ -211,7 +217,7 @@ class AiApiClient {
     final token = await _deviceToken(refresh: refreshDeviceToken);
     final prefs = await SharedPreferences.getInstance();
 
-    final apiKey = prefs.getString('ai_settings_api_key');
+    final apiKey = await _secrets.readProviderApiKey();
     final baseUrl = prefs.getString('ai_settings_base_url');
     final modelName = prefs.getString('ai_settings_model_name');
 
@@ -224,13 +230,12 @@ class AiApiClient {
   }
 
   Future<String> _deviceToken({bool refresh = false}) async {
-    final prefs = await SharedPreferences.getInstance();
-    final existing = refresh ? null : prefs.getString(_tokenKey);
+    final existing = refresh ? null : await _secrets.readDeviceToken();
     if (existing != null && existing.isNotEmpty) {
       return existing;
     }
     if (refresh) {
-      await prefs.remove(_tokenKey);
+      await _secrets.deleteDeviceToken();
     }
 
     Response<Map<String, Object?>> response;
@@ -246,7 +251,7 @@ class AiApiClient {
     if (token == null) {
       throw Exception('无法获取匿名设备 token');
     }
-    await prefs.setString(_tokenKey, token);
+    await _secrets.writeDeviceToken(token);
     return token;
   }
 
@@ -330,11 +335,13 @@ Map<String, String> buildAiProviderHeaders({
   if (normalizedApiKey != null) {
     headers['x-ai-provider-api-key'] = normalizedApiKey;
   }
-  if (normalizedBaseUrl != null) {
-    headers['x-ai-provider-base-url'] = normalizedBaseUrl;
-  }
-  if (normalizedModelName != null) {
-    headers['x-ai-provider-model'] = normalizedModelName;
+  if (normalizedApiKey != null) {
+    if (normalizedBaseUrl != null) {
+      headers['x-ai-provider-base-url'] = normalizedBaseUrl;
+    }
+    if (normalizedModelName != null) {
+      headers['x-ai-provider-model'] = normalizedModelName;
+    }
   }
 
   return headers;

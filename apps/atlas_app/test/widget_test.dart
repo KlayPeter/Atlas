@@ -1,10 +1,13 @@
 import 'package:atlas_app/app/atlas_app.dart';
 import 'package:atlas_app/features/settings/presentation/settings_page.dart';
+import 'package:atlas_app/features/ai/data/ai_secrets_repository.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:receive_sharing_intent/receive_sharing_intent.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+
+import 'support/memory_secure_value_store.dart';
 
 void main() {
   setUp(() {
@@ -25,7 +28,14 @@ void main() {
 
   testWidgets('settings route exposes theme controls', (tester) async {
     await tester.pumpWidget(
-      const ProviderScope(child: MaterialApp(home: SettingsPage())),
+      ProviderScope(
+        overrides: [
+          aiSecretsRepositoryProvider.overrideWithValue(
+            AiSecretsRepository(MemorySecureValueStore()),
+          ),
+        ],
+        child: const MaterialApp(home: SettingsPage()),
+      ),
     );
     await tester.pump(const Duration(milliseconds: 500));
 

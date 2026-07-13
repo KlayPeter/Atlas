@@ -2,10 +2,13 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:atlas_app/features/ai/data/ai_api_client.dart';
+import 'package:atlas_app/features/ai/data/ai_secrets_repository.dart';
 import 'package:atlas_app/features/ai/application/ai_models.dart';
 import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+
+import 'support/memory_secure_value_store.dart';
 
 void main() {
   test('defaultAtlasBffUrl has a stable local fallback', () {
@@ -40,9 +43,10 @@ void main() {
   test(
     'refreshes device token once when BFF rejects the cached token',
     () async {
-      SharedPreferences.setMockInitialValues({
-        'atlas.auth.deviceToken': 'stale-token',
-      });
+      SharedPreferences.setMockInitialValues({});
+      final secureStore = MemorySecureValueStore()
+        ..values['atlas.secure.deviceToken'] = 'stale-token';
+      final secrets = AiSecretsRepository(secureStore);
 
       final authHeaders = <String?>[];
       final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
@@ -99,7 +103,11 @@ void main() {
       });
 
       final baseUrl = 'http://${server.address.host}:${server.port}';
-      final client = AiApiClient(Dio(), defaultBffUrl: baseUrl);
+      final client = AiApiClient(
+        Dio(),
+        defaultBffUrl: baseUrl,
+        secrets: secrets,
+      );
 
       final result = await client.generateStudyQuestions(
         context: const AiDocumentContext(
@@ -110,9 +118,8 @@ void main() {
         ),
       );
 
-      final prefs = await SharedPreferences.getInstance();
       expect(authHeaders, ['Bearer stale-token', 'Bearer fresh-token']);
-      expect(prefs.getString('atlas.auth.deviceToken'), 'fresh-token');
+      expect(await secrets.readDeviceToken(), 'fresh-token');
       expect(result.questions.single.question, 'What is Atlas?');
     },
   );
