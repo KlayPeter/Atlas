@@ -40,6 +40,7 @@ class HtmlEnhanceResult {
     required this.title,
     required this.lead,
     required this.summary,
+    this.rewrittenMarkdown = '',
     required this.sections,
     required this.keyConcepts,
     required this.questions,
@@ -48,6 +49,7 @@ class HtmlEnhanceResult {
   final String title;
   final String lead;
   final String summary;
+  final String rewrittenMarkdown;
   final List<HtmlEnhanceSection> sections;
   final List<HtmlEnhanceKeyConcept> keyConcepts;
   final List<HtmlEnhanceQuestion> questions;
@@ -57,6 +59,7 @@ class HtmlEnhanceResult {
       title: json['title'] as String? ?? '',
       lead: json['lead'] as String? ?? '',
       summary: json['summary'] as String? ?? '',
+      rewrittenMarkdown: json['rewrittenMarkdown'] as String? ?? '',
       sections: (json['sections'] as List<dynamic>? ?? [])
           .map((e) => HtmlEnhanceSection.fromJson(e as Map<String, dynamic>))
           .toList(growable: false),

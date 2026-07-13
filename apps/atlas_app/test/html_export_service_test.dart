@@ -61,6 +61,25 @@ void main() {
     expect(html, contains('&lt;script&gt;lead&lt;&#47;script&gt;'));
     expect(html, contains('&lt;iframe&gt;x&lt;&#47;iframe&gt;'));
   });
+
+  test('readable export replaces the body with safely rendered rewrite', () {
+    final html = service.buildHtml(
+      _document('# Dense title\n\nA difficult original paragraph.'),
+      enhance: const HtmlEnhanceResult(
+        title: 'Easy Atlas',
+        lead: '导读',
+        summary: '摘要',
+        rewrittenMarkdown: '# 易读标题\n\n这是拆分并解释后的正文。',
+        sections: [],
+        keyConcepts: [],
+        questions: [],
+      ),
+    );
+
+    expect(html, contains('这是拆分并解释后的正文。'));
+    expect(html, isNot(contains('A difficult original paragraph.')));
+    expect(html, contains('AI 易读版'));
+  });
 }
 
 DocumentContent _document(String markdown) {

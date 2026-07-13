@@ -33,7 +33,7 @@ void main() {
       enhanceHtml:
           ({
             required AiDocumentContext context,
-            String mode = 'summary',
+            String mode = 'readable',
           }) async {
             aiCalls += 1;
             throw StateError('AI must not run for original previews');
@@ -51,7 +51,7 @@ void main() {
     expect(writtenEnhancement, isNull);
   });
 
-  test('summary preview analyzes long documents in bounded chunks', () async {
+  test('readable preview rewrites every bounded chunk in order', () async {
     var aiCalls = 0;
     HtmlEnhanceResult? writtenEnhancement;
     final longDocument = DocumentContent(
@@ -64,13 +64,14 @@ void main() {
       enhanceHtml:
           ({
             required AiDocumentContext context,
-            String mode = 'summary',
+            String mode = 'readable',
           }) async {
             aiCalls += 1;
             return HtmlEnhanceResult(
               title: 'Atlas',
               lead: '导读 $aiCalls',
               summary: '摘要 $aiCalls',
+              rewrittenMarkdown: '易读正文 $aiCalls',
               sections: const [],
               keyConcepts: const [],
               questions: const [],
@@ -82,11 +83,49 @@ void main() {
       },
     );
 
-    await generator.generate(longDocument, HtmlPreviewMode.summary);
+    await generator.generate(longDocument, HtmlPreviewMode.readable);
 
     expect(aiCalls, 4);
     expect(writtenEnhancement?.summary, contains('第 4 部分：摘要 4'));
     expect(writtenEnhancement?.lead, contains('覆盖文档内容'));
+    expect(
+      writtenEnhancement?.rewrittenMarkdown,
+      '易读正文 1\n\n易读正文 2\n\n易读正文 3\n\n易读正文 4',
+    );
+  });
+
+  test('sampled long documents keep the exact original body', () async {
+    HtmlEnhanceResult? writtenEnhancement;
+    final longDocument = DocumentContent(
+      summary: document.summary,
+      rawText: List.filled(80000, 'x').join(),
+      sections: const [],
+      paragraphs: const [],
+    );
+    final generator = HtmlPreviewGenerator(
+      enhanceHtml:
+          ({
+            required AiDocumentContext context,
+            String mode = 'readable',
+          }) async => const HtmlEnhanceResult(
+            title: 'Atlas',
+            lead: '导读',
+            summary: '摘要',
+            rewrittenMarkdown: '局部改写',
+            sections: [],
+            keyConcepts: [],
+            questions: [],
+          ),
+      writeHtml: (document, {enhance}) async {
+        writtenEnhancement = enhance;
+        return File('/tmp/atlas-sampled.html');
+      },
+    );
+
+    await generator.generate(longDocument, HtmlPreviewMode.readable);
+
+    expect(writtenEnhancement?.rewrittenMarkdown, isEmpty);
+    expect(writtenEnhancement?.lead, contains('代表性片段'));
   });
 
   testWidgets('preview generation errors replace the loading indicator', (
@@ -94,7 +133,7 @@ void main() {
   ) async {
     final generator = HtmlPreviewGenerator(
       enhanceHtml:
-          ({required AiDocumentContext context, String mode = 'summary'}) {
+          ({required AiDocumentContext context, String mode = 'readable'}) {
             throw StateError('offline');
           },
       writeHtml: (document, {enhance}) {

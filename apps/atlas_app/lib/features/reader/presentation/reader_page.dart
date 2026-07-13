@@ -10,15 +10,13 @@ import '../../../app/routing/app_routes.dart';
 import '../../../app/theme/app_theme.dart';
 import '../../../domain/document/document_content.dart';
 import '../../../domain/document/document_summary.dart';
-import '../../../domain/ai/study_models.dart';
 import '../../ai/application/ai_models.dart';
 import '../../ai/data/ai_api_client.dart';
 import '../../ai/presentation/ai_panel.dart';
 import '../../documents/application/document_content_provider.dart';
 import '../../documents/data/document_repository.dart';
 import '../../library/application/library_controller.dart';
-import '../../html_export/application/html_export_service.dart';
-import '../../html_export/presentation/html_preview_page.dart';
+import '../../html_export/application/html_preview_generator.dart';
 import '../application/reading_settings_controller.dart';
 import '../application/document_search.dart';
 import 'reader_markdown_view.dart';
@@ -319,8 +317,9 @@ class _ReaderPageState extends ConsumerState<ReaderPage> {
             child: const Text('原文展示'),
           ),
           FilledButton(
-            onPressed: () => Navigator.of(context).pop(HtmlPreviewMode.summary),
-            child: const Text('总结全文'),
+            onPressed: () =>
+                Navigator.of(context).pop(HtmlPreviewMode.readable),
+            child: const Text('AI 易读版'),
           ),
         ],
       ),
@@ -336,7 +335,7 @@ class _ReaderPageState extends ConsumerState<ReaderPage> {
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('生成 HTML'),
-        content: const Text('是否在 HTML 中包含 AI 生成的导读、摘要和思考题？这可能需要几秒钟。'),
+        content: const Text('是否生成 AI 易读版正文，并附带导读、摘要和思考题？这可能需要几秒钟。'),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(false),
@@ -344,7 +343,7 @@ class _ReaderPageState extends ConsumerState<ReaderPage> {
           ),
           FilledButton(
             onPressed: () => Navigator.of(context).pop(true),
-            child: const Text('AI 强化导出'),
+            child: const Text('导出 AI 易读版'),
           ),
         ],
       ),
@@ -356,17 +355,12 @@ class _ReaderPageState extends ConsumerState<ReaderPage> {
     messenger.showSnackBar(const SnackBar(content: Text('正在生成 HTML...')));
 
     try {
-      HtmlEnhanceResult? enhance;
-      if (wantEnhance) {
-        final aiClient = ref.read(aiApiClientProvider);
-        enhance = await aiClient.enhanceHtml(
-          context: AiDocumentContext.fromDocument(document),
-        );
-      }
-
       final file = await ref
-          .read(htmlExportServiceProvider)
-          .writeHtml(document, enhance: enhance);
+          .read(htmlPreviewGeneratorProvider)
+          .generate(
+            document,
+            wantEnhance ? HtmlPreviewMode.readable : HtmlPreviewMode.original,
+          );
 
       messenger.hideCurrentSnackBar();
       if (!mounted) return;

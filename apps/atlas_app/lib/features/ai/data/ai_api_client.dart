@@ -148,7 +148,7 @@ class AiApiClient {
 
   Future<HtmlEnhanceResult> enhanceHtml({
     required AiDocumentContext context,
-    String mode = 'summary',
+    String mode = 'readable',
   }) async {
     final response = await _post('/v1/exports/html/enhance', {
       'context': context.toJson(),

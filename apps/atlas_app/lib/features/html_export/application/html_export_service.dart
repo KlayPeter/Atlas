@@ -17,7 +17,11 @@ class HtmlExportService {
   const HtmlExportService();
 
   String buildHtml(DocumentContent document, {HtmlEnhanceResult? enhance}) {
-    final rendered = document.summary.kind == DocumentKind.markdown
+    final rewrittenMarkdown = enhance?.rewrittenMarkdown.trim() ?? '';
+    final usesReadableRewrite = rewrittenMarkdown.isNotEmpty;
+    final rendered = usesReadableRewrite
+        ? _renderMarkdown(rewrittenMarkdown)
+        : document.summary.kind == DocumentKind.markdown
         ? _renderMarkdown(document.rawText)
         : _renderPlainText(document.paragraphs);
 
@@ -34,6 +38,7 @@ class HtmlExportService {
         <h2>AI 导读</h2>
         ${enhance.lead.trim().isEmpty ? '' : '<p class="lead"><strong>${htmlEscape.convert(enhance.lead)}</strong></p>'}
         ${enhance.summary.trim().isEmpty ? '' : '<p>${htmlEscape.convert(enhance.summary)}</p>'}
+        ${usesReadableRewrite ? '<p class="rewrite-note">下方正文为 AI 易读版；事实、数字与结论应与原文保持一致。需要逐字版本时请选择“原文展示”。</p>' : ''}
         ${enhance.sections.where((s) => s.title.trim().isNotEmpty || s.content.trim().isNotEmpty).map((s) => '<section><h3>${htmlEscape.convert(s.title)}</h3><p>${htmlEscape.convert(s.content)}</p></section>').join('')}
         ${enhance.keyConcepts.isEmpty ? '' : '<h3>核心概念</h3><ul>${enhance.keyConcepts.map((k) => '<li><strong>${htmlEscape.convert(k.term)}：</strong>${htmlEscape.convert(k.definition)}</li>').join()}</ul>'}
         ${enhance.questions.isEmpty ? '' : '<h3>思考题</h3><ul>${enhance.questions.map((q) => '<li><strong>问题：</strong>${htmlEscape.convert(q.q)}<br><strong>参考：</strong>${htmlEscape.convert(q.a)}</li>').join()}</ul>'}
@@ -85,6 +90,7 @@ class HtmlExportService {
     .ai-enhance { margin: 1.5em 0; padding: 20px; border: 1px solid #cbd9d4; border-radius: 12px; background: #edf4f1; }
     .ai-enhance h2 { margin-top: 0; }
     .ai-enhance .lead { font-size: 1.05em; }
+    .rewrite-note { padding: 10px 12px; border-left: 3px solid #5f8f86; background: #ffffff8a; }
     @media (max-width: 600px) { body { font-size: 16px; } main { padding: 24px 18px 48px; } }
     @media (prefers-color-scheme: dark) {
       body { background: #101614; color: #e3ebe7; }

@@ -13,7 +13,8 @@ final appRouterProvider = Provider<GoRouter>((ref) {
     initialLocation: AppRoutes.library,
     redirect: (context, state) {
       final uriString = state.uri.toString();
-      if (uriString.startsWith('content://') || uriString.startsWith('file://')) {
+      if (uriString.startsWith('content://') ||
+          uriString.startsWith('file://')) {
         return AppRoutes.library;
       }
       return null;
@@ -37,7 +38,7 @@ final appRouterProvider = Provider<GoRouter>((ref) {
           final mode = state.extra as HtmlPreviewMode?;
           return HtmlPreviewPage(
             exportId: exportId,
-            mode: mode ?? HtmlPreviewMode.summary,
+            mode: mode ?? HtmlPreviewMode.readable,
           );
         },
       ),

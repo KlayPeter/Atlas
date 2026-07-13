@@ -81,6 +81,12 @@ class HtmlPreviewGenerator {
       title: results.first.title,
       lead: '$coverage ${results.first.lead}',
       summary: summaries.join('\n'),
+      rewrittenMarkdown: sampled
+          ? ''
+          : results
+                .map((result) => result.rewrittenMarkdown.trim())
+                .where((value) => value.isNotEmpty)
+                .join('\n\n'),
       sections: results.expand((result) => result.sections).take(20).toList(),
       keyConcepts: concepts.values.take(20).toList(),
       questions: results.expand((result) => result.questions).take(10).toList(),
@@ -89,7 +95,7 @@ class HtmlPreviewGenerator {
 }
 
 enum HtmlPreviewMode {
-  summary('summary', true),
+  readable('readable', true),
   original('original', false);
 
   const HtmlPreviewMode(this.apiValue, this.requiresAi);
