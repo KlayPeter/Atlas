@@ -47,7 +47,7 @@ class HtmlExportService {
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src data: https:; style-src 'unsafe-inline'; font-src data:; script-src 'none'; connect-src 'none'; frame-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src data:; style-src 'unsafe-inline'; font-src data:; script-src 'none'; connect-src 'none'; frame-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'">
   <meta name="referrer" content="no-referrer">
   <title>${htmlEscape.convert(title)}</title>
   <style>
@@ -184,12 +184,11 @@ class HtmlExportService {
 
   void _prepareImage(markdown.Element element) {
     final source = element.attributes['src']?.trim() ?? '';
-    final normalized = source.toLowerCase();
     final safeDataImage = RegExp(
-      r'^data:image/(?:png|jpe?g|gif|webp|svg\+xml);base64,',
+      r'^data:image/(?:png|jpe?g|gif|webp);base64,',
       caseSensitive: false,
     ).hasMatch(source);
-    if (!normalized.startsWith('https://') && !safeDataImage) {
+    if (!safeDataImage) {
       element.attributes.remove('src');
     }
     element.attributes['loading'] = 'lazy';

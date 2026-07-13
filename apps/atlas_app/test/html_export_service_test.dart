@@ -32,7 +32,8 @@ void main() {
     expect(html, isNot(contains('<script>alert(1)</script>')));
     expect(html, isNot(contains('javascript:')));
     expect(html, isNot(contains('file:///etc/passwd')));
-    expect(html, contains('src="https://images.example/cover.png"'));
+    expect(html, isNot(contains('src="https://images.example/cover.png"')));
+    expect(html, contains("img-src data:"));
     expect(html, contains('referrerpolicy="no-referrer"'));
     expect(html, contains('loading="lazy"'));
   });
