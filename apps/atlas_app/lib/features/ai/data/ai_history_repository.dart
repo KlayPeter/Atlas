@@ -65,6 +65,13 @@ class AiHistoryRepository {
     return entry;
   }
 
+  Future<void> deleteForDocument(String documentId) async {
+    final entries = await _readAll();
+    await _writeAll(
+      entries.where((entry) => entry.documentId != documentId).toList(),
+    );
+  }
+
   Future<List<AiHistoryEntry>> _readAll() async {
     final prefs = await SharedPreferences.getInstance();
     return (prefs.getStringList(_historyKey) ?? const [])

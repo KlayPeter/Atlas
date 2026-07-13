@@ -30,4 +30,21 @@ void main() {
       expect(history, hasLength(1));
     },
   );
+
+  test('deletes only history belonging to the removed document', () async {
+    const repository = AiHistoryRepository();
+    for (final id in ['doc-1', 'doc-2']) {
+      await repository.save(
+        documentId: id,
+        kind: AiHistoryKind.summary,
+        prompt: '',
+        result: const AiResult(title: '总结', body: '内容'),
+      );
+    }
+
+    await repository.deleteForDocument('doc-1');
+
+    expect(await repository.listForDocument('doc-1'), isEmpty);
+    expect(await repository.listForDocument('doc-2'), hasLength(1));
+  });
 }

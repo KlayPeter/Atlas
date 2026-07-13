@@ -56,11 +56,13 @@ void main() {
       bytes: utf8.encode('temporary text'),
       originalName: 'temp.txt',
     );
+    await repository.saveProgress(document.id, 240, 0.5);
 
     await repository.deleteDocument(document.id);
 
     expect(await repository.listDocuments(), isEmpty);
     expect(await repository.getDocument(document.id), isNull);
+    expect(await repository.getSavedOffset(document.id), 0);
   });
 
   test('rejects oversized files before reading them into memory', () async {

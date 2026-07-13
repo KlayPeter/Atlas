@@ -171,6 +171,8 @@ class DocumentRepository {
     await _saveDocuments(
       documents.where((document) => document.id != id).toList(),
     );
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove('$_offsetPrefix$id');
   }
 
   Future<void> saveProgress(String id, double offset, double progress) async {

@@ -2,6 +2,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../domain/document/document_summary.dart';
 import '../../documents/data/document_repository.dart';
+import '../../ai/data/ai_history_repository.dart';
 
 final libraryControllerProvider =
     AsyncNotifierProvider<LibraryController, List<DocumentSummary>>(
@@ -36,6 +37,7 @@ class LibraryController extends AsyncNotifier<List<DocumentSummary>> {
     state = AsyncData(previous.where((document) => document.id != id).toList());
     try {
       await _repository.deleteDocument(id);
+      await ref.read(aiHistoryRepositoryProvider).deleteForDocument(id);
       state = AsyncData(await _repository.listDocuments());
     } catch (error, stackTrace) {
       state = AsyncError(error, stackTrace);
