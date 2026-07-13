@@ -12,6 +12,32 @@ import '../../../app/routing/app_routes.dart';
 import '../../library/application/library_controller.dart';
 import '../data/document_repository.dart';
 
+typedef SharedImportFile = ({File file, bool temporary});
+
+@visibleForTesting
+Future<SharedImportFile?> resolveSharedMediaFile(
+  SharedMediaFile item, {
+  Directory? temporaryDirectory,
+}) async {
+  final existingFile = File(item.path);
+  if (await existingFile.exists()) {
+    return (file: existingFile, temporary: false);
+  }
+
+  if (item.type == SharedMediaType.file) {
+    return (file: existingFile, temporary: false);
+  }
+  if (item.type == SharedMediaType.text || item.type == SharedMediaType.url) {
+    final tempDir = temporaryDirectory ?? await getTemporaryDirectory();
+    final file = File(
+      '${tempDir.path}/atlas-shared-${DateTime.now().microsecondsSinceEpoch}.txt',
+    );
+    await file.writeAsString(item.path, flush: true);
+    return (file: file, temporary: true);
+  }
+  return null;
+}
+
 final shareImportControllerProvider =
     Provider.family<ShareImportController, GoRouter>((ref, router) {
       final controller = ShareImportController(
@@ -64,7 +90,7 @@ class ShareImportController {
 
   Future<void> _handleSharedMedia(List<SharedMediaFile> files) async {
     for (final item in files) {
-      final sharedFile = await _fileFromSharedMedia(item);
+      final sharedFile = await resolveSharedMediaFile(item);
       if (sharedFile == null) {
         continue;
       }
@@ -80,23 +106,6 @@ class ShareImportController {
         }
       }
     }
-  }
-
-  Future<({File file, bool temporary})?> _fileFromSharedMedia(
-    SharedMediaFile item,
-  ) async {
-    if (item.type == SharedMediaType.file) {
-      return (file: File(item.path), temporary: false);
-    }
-    if (item.type == SharedMediaType.text || item.type == SharedMediaType.url) {
-      final tempDir = await getTemporaryDirectory();
-      final file = File(
-        '${tempDir.path}/atlas-shared-${DateTime.now().microsecondsSinceEpoch}.txt',
-      );
-      await file.writeAsString(item.path, flush: true);
-      return (file: file, temporary: true);
-    }
-    return null;
   }
 
   Future<void> dispose() async {
