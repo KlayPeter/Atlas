@@ -38,12 +38,53 @@ class HtmlPreviewGenerator {
 
   Future<File> generate(DocumentContent document, HtmlPreviewMode mode) async {
     final enhance = mode.requiresAi
-        ? await enhanceHtml(
-            context: AiDocumentContext.fromDocument(document),
-            mode: mode.apiValue,
-          )
+        ? await _enhanceDocument(document, mode)
         : null;
     return writeHtml(document, enhance: enhance);
+  }
+
+  Future<HtmlEnhanceResult> _enhanceDocument(
+    DocumentContent document,
+    HtmlPreviewMode mode,
+  ) async {
+    final chunks = AiDocumentContext.htmlChunks(document);
+    final results = <HtmlEnhanceResult>[];
+    for (final context in chunks.contexts) {
+      results.add(await enhanceHtml(context: context, mode: mode.apiValue));
+    }
+    if (results.length == 1) {
+      return results.single;
+    }
+    return _mergeEnhancements(results, sampled: chunks.sampled);
+  }
+
+  HtmlEnhanceResult _mergeEnhancements(
+    List<HtmlEnhanceResult> results, {
+    required bool sampled,
+  }) {
+    final concepts = <String, HtmlEnhanceKeyConcept>{};
+    for (final result in results) {
+      for (final concept in result.keyConcepts) {
+        concepts.putIfAbsent(concept.term.trim().toLowerCase(), () => concept);
+      }
+    }
+
+    final coverage = sampled
+        ? '本文较长，以下导读基于分布于全文的 ${results.length} 个代表性片段。'
+        : '以下导读已分 ${results.length} 个片段覆盖文档内容。';
+    final summaries = <String>[coverage];
+    for (var index = 0; index < results.length; index += 1) {
+      summaries.add('第 ${index + 1} 部分：${results[index].summary}');
+    }
+
+    return HtmlEnhanceResult(
+      title: results.first.title,
+      lead: '$coverage ${results.first.lead}',
+      summary: summaries.join('\n'),
+      sections: results.expand((result) => result.sections).take(20).toList(),
+      keyConcepts: concepts.values.take(20).toList(),
+      questions: results.expand((result) => result.questions).take(10).toList(),
+    );
   }
 }
 

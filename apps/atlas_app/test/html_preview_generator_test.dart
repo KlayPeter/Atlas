@@ -51,6 +51,44 @@ void main() {
     expect(writtenEnhancement, isNull);
   });
 
+  test('summary preview analyzes long documents in bounded chunks', () async {
+    var aiCalls = 0;
+    HtmlEnhanceResult? writtenEnhancement;
+    final longDocument = DocumentContent(
+      summary: document.summary,
+      rawText: List.generate(30000, (index) => '${index % 10}').join(),
+      sections: const [],
+      paragraphs: const [],
+    );
+    final generator = HtmlPreviewGenerator(
+      enhanceHtml:
+          ({
+            required AiDocumentContext context,
+            String mode = 'summary',
+          }) async {
+            aiCalls += 1;
+            return HtmlEnhanceResult(
+              title: 'Atlas',
+              lead: '导读 $aiCalls',
+              summary: '摘要 $aiCalls',
+              sections: const [],
+              keyConcepts: const [],
+              questions: const [],
+            );
+          },
+      writeHtml: (document, {enhance}) async {
+        writtenEnhancement = enhance;
+        return File('/tmp/atlas-summary.html');
+      },
+    );
+
+    await generator.generate(longDocument, HtmlPreviewMode.summary);
+
+    expect(aiCalls, 4);
+    expect(writtenEnhancement?.summary, contains('第 4 部分：摘要 4'));
+    expect(writtenEnhancement?.lead, contains('覆盖文档内容'));
+  });
+
   testWidgets('preview generation errors replace the loading indicator', (
     tester,
   ) async {
