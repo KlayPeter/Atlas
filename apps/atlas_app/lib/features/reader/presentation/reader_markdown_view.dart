@@ -1,5 +1,6 @@
 import 'dart:math' as math;
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_highlight/flutter_highlight.dart';
@@ -612,31 +613,71 @@ class _AtlasMermaidBuilder extends MarkdownWidgetBuilder {
 
     return LayoutBuilder(
       builder: (context, constraints) {
-        final isDark = Theme.of(context).brightness == Brightness.dark;
+        final theme = Theme.of(context);
         final minWidth = compact ? constraints.maxWidth : 980.0;
-        final style = _style(isDark);
+        final style = _style(theme.colorScheme);
 
-        return Container(
-          margin: EdgeInsets.symmetric(vertical: compact ? 8 : 18),
-          decoration: BoxDecoration(
-            color: Color(style.backgroundColor),
-            borderRadius: BorderRadius.circular(8),
-            border: Border.all(
-              color: const Color(0xFFA78BFA).withValues(alpha: 0.38),
-            ),
-          ),
-          clipBehavior: Clip.antiAlias,
-          child: SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            padding: const EdgeInsets.all(12),
-            child: ConstrainedBox(
-              constraints: BoxConstraints(
-                minWidth: math.max(constraints.maxWidth, minWidth),
+        return Semantics(
+          button: true,
+          label: '点击放大 Mermaid 图表',
+          child: Tooltip(
+            message: '点击放大 Mermaid 图表',
+            child: InkWell(
+              key: const ValueKey('mermaid-diagram-preview'),
+              borderRadius: BorderRadius.circular(12),
+              onTap: () => Navigator.of(context).push(
+                MaterialPageRoute<void>(
+                  builder: (context) => _MermaidFullscreenViewer(
+                    code: mermaidNode.code,
+                    style: style,
+                  ),
+                ),
               ),
-              child: MermaidDiagram(
-                code: mermaidNode.code,
-                style: style,
-                enableResponsive: !compact,
+              child: Container(
+                margin: EdgeInsets.symmetric(vertical: compact ? 8 : 18),
+                decoration: BoxDecoration(
+                  color: Color(style.backgroundColor),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: theme.colorScheme.outlineVariant),
+                ),
+                clipBehavior: Clip.antiAlias,
+                child: Stack(
+                  children: [
+                    SingleChildScrollView(
+                      scrollDirection: Axis.horizontal,
+                      padding: const EdgeInsets.all(12),
+                      child: ConstrainedBox(
+                        constraints: BoxConstraints(
+                          minWidth: math.max(constraints.maxWidth, minWidth),
+                        ),
+                        child: MermaidDiagram(
+                          code: mermaidNode.code,
+                          style: style,
+                          enableResponsive: !compact,
+                        ),
+                      ),
+                    ),
+                    PositionedDirectional(
+                      top: 8,
+                      end: 8,
+                      child: DecoratedBox(
+                        decoration: BoxDecoration(
+                          color: theme.colorScheme.surfaceContainerHighest
+                              .withValues(alpha: 0.76),
+                          borderRadius: BorderRadius.circular(20),
+                        ),
+                        child: Padding(
+                          padding: const EdgeInsets.all(7),
+                          child: Icon(
+                            Icons.open_in_full_rounded,
+                            size: 17,
+                            color: theme.colorScheme.onSurfaceVariant,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
               ),
             ),
           ),
@@ -645,32 +686,128 @@ class _AtlasMermaidBuilder extends MarkdownWidgetBuilder {
     );
   }
 
-  MermaidStyle _style(bool isDark) {
-    if (isDark) {
-      return MermaidStyle.dark().copyWith(
-        defaultNodeStyle: const NodeStyle(
-          fillColor: 0xFF28233D,
-          strokeColor: 0xFFA78BFA,
-          textColor: 0xFFF8FAFC,
-        ),
-        defaultEdgeStyle: const EdgeStyle(strokeColor: 0xFFE5E7EB),
-        nodeSpacingX: 88,
-        nodeSpacingY: 64,
-        padding: 28,
-      );
-    }
-
-    return const MermaidStyle(
-      backgroundColor: 0xFFFFFFFF,
+  MermaidStyle _style(ColorScheme scheme) {
+    return MermaidStyle(
+      backgroundColor: scheme.surfaceContainerLowest.toARGB32(),
       defaultNodeStyle: NodeStyle(
-        fillColor: 0xFFF3F0FF,
-        strokeColor: 0xFFA78BFA,
-        textColor: 0xFF111827,
+        fillColor: scheme.primaryContainer.toARGB32(),
+        strokeColor: scheme.primary.toARGB32(),
+        textColor: scheme.onPrimaryContainer.toARGB32(),
       ),
-      defaultEdgeStyle: EdgeStyle(strokeColor: 0xFF30333A),
+      defaultEdgeStyle: EdgeStyle(
+        strokeColor: scheme.onSurfaceVariant.toARGB32(),
+      ),
       nodeSpacingX: 88,
       nodeSpacingY: 64,
       padding: 28,
+      fontFamily: _diagramFontFamily(),
+      themeMode: scheme.brightness == Brightness.dark
+          ? MermaidThemeMode.dark
+          : MermaidThemeMode.light,
+    );
+  }
+
+  String _diagramFontFamily() => switch (defaultTargetPlatform) {
+    TargetPlatform.android => 'sans-serif',
+    TargetPlatform.iOS || TargetPlatform.macOS => 'PingFang SC',
+    TargetPlatform.windows => 'Microsoft YaHei',
+    TargetPlatform.linux => 'Noto Sans CJK SC',
+    TargetPlatform.fuchsia => 'sans-serif',
+  };
+}
+
+class _MermaidFullscreenViewer extends StatefulWidget {
+  const _MermaidFullscreenViewer({required this.code, required this.style});
+
+  final String code;
+  final MermaidStyle style;
+
+  @override
+  State<_MermaidFullscreenViewer> createState() =>
+      _MermaidFullscreenViewerState();
+}
+
+class _MermaidFullscreenViewerState extends State<_MermaidFullscreenViewer> {
+  static const _diagramWidth = 1200.0;
+  final _transformationController = TransformationController();
+  var _initialScale = 1.0;
+  var _initialized = false;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (_initialized) {
+      return;
+    }
+    _initialScale = (MediaQuery.sizeOf(context).width / _diagramWidth).clamp(
+      0.35,
+      1.0,
+    );
+    _resetZoom();
+    _initialized = true;
+  }
+
+  @override
+  void dispose() {
+    _transformationController.dispose();
+    super.dispose();
+  }
+
+  void _resetZoom() {
+    _transformationController.value = Matrix4.diagonal3Values(
+      _initialScale,
+      _initialScale,
+      1,
+    );
+  }
+
+  void _toggleZoom() {
+    final currentScale = _transformationController.value.getMaxScaleOnAxis();
+    if (currentScale > _initialScale * 1.3) {
+      _resetZoom();
+      return;
+    }
+    _transformationController.value = Matrix4.diagonal3Values(1.8, 1.8, 1);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Mermaid 图表'),
+        actions: [
+          IconButton(
+            tooltip: '重置缩放',
+            onPressed: _resetZoom,
+            icon: const Icon(Icons.center_focus_strong_rounded),
+          ),
+        ],
+      ),
+      body: SafeArea(
+        child: GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onDoubleTap: _toggleZoom,
+          child: ColoredBox(
+            color: scheme.surface,
+            child: InteractiveViewer(
+              transformationController: _transformationController,
+              constrained: false,
+              minScale: 0.25,
+              maxScale: 6,
+              boundaryMargin: const EdgeInsets.all(240),
+              child: SizedBox(
+                width: _diagramWidth,
+                child: MermaidDiagram(
+                  code: widget.code,
+                  style: widget.style,
+                  enableResponsive: false,
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
     );
   }
 }

@@ -33,6 +33,10 @@ sequenceDiagram
       await tester.pumpAndSettle();
 
       expect(find.byType(MermaidDiagram), findsOneWidget);
+      final diagram = tester.widget<MermaidDiagram>(
+        find.byType(MermaidDiagram),
+      );
+      expect(diagram.style?.fontFamily, isNotEmpty);
       expect(
         find.byWidgetPredicate(
           (widget) =>
@@ -41,6 +45,13 @@ sequenceDiagram
         ),
         findsWidgets,
       );
+
+      await tester.tap(find.byKey(const ValueKey('mermaid-diagram-preview')));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Mermaid 图表'), findsOneWidget);
+      expect(find.byType(InteractiveViewer), findsOneWidget);
+      expect(find.byTooltip('重置缩放'), findsOneWidget);
     },
   );
 
