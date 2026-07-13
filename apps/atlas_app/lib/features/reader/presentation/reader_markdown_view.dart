@@ -137,17 +137,11 @@ class ReaderMarkdownView extends StatelessWidget {
             String selectedText =
                 delegate?.getSelectedContent()?.plainText.trim() ?? '';
 
-            debugPrint(
-              'Selection: SelectedContent plainText = "$selectedText"',
-            );
-
             if (selectedText.isEmpty || selectedText == '_') {
-              // Fallback for older behavior if the delegate approach fails
               // ignore: deprecated_member_use
               final textValue = innerState?.textEditingValue;
               selectedText =
                   textValue?.selection.textInside(textValue.text).trim() ?? '';
-              debugPrint('Selection: fallback textValue = "$selectedText"');
             }
             final anchor =
                 selectableRegionState.contextMenuAnchors.primaryAnchor;
