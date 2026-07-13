@@ -1,5 +1,7 @@
 # Atlas
 
+<img src="apps/atlas_app/assets/images/logo.svg" width="128" height="128" align="right" alt="Atlas Logo">
+
 Atlas is a mobile-first Markdown / TXT reading app. It focuses on opening local text files quickly, rendering them beautifully on phones, and using document-aware AI to explain, summarize, question, and convert content into readable HTML.
 
 ## Repository Layout
