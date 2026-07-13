@@ -20,6 +20,7 @@ import '../../library/application/library_controller.dart';
 import '../../html_export/application/html_export_service.dart';
 import '../../html_export/presentation/html_preview_page.dart';
 import '../application/reading_settings_controller.dart';
+import '../application/document_search.dart';
 import 'reader_markdown_view.dart';
 
 class ReaderPage extends ConsumerStatefulWidget {
@@ -227,69 +228,19 @@ class _ReaderPageState extends ConsumerState<ReaderPage> {
   }
 
   Future<void> _showSearch(DocumentContent document) async {
-    final queryController = TextEditingController();
-    await showDialog<void>(
+    final firstOffset = await showDialog<int>(
       context: context,
-      builder: (context) {
-        var results = <int>[];
-        return StatefulBuilder(
-          builder: (context, setState) => AlertDialog(
-            title: const Text('文档内搜索'),
-            content: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                TextField(
-                  controller: queryController,
-                  autofocus: true,
-                  decoration: const InputDecoration(hintText: '关键词'),
-                  onChanged: (value) {
-                    setState(() {
-                      results = _findMatches(document.rawText, value);
-                    });
-                  },
-                ),
-                const SizedBox(height: AtlasSpacing.sm),
-                Align(
-                  alignment: Alignment.centerLeft,
-                  child: Text('找到 ${results.length} 处'),
-                ),
-              ],
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.of(context).pop(),
-                child: const Text('关闭'),
-              ),
-              FilledButton(
-                onPressed: results.isEmpty
-                    ? null
-                    : () {
-                        Navigator.of(context).pop();
-                        final ratio = results.first / document.rawText.length;
-                        _scrollController.animateTo(
-                          _scrollController.position.maxScrollExtent * ratio,
-                          duration: const Duration(milliseconds: 280),
-                          curve: Curves.easeOut,
-                        );
-                      },
-                child: const Text('跳转首个'),
-              ),
-            ],
-          ),
-        );
-      },
+      builder: (context) => _DocumentSearchDialog(source: document.rawText),
     );
-    queryController.dispose();
-  }
-
-  List<int> _findMatches(String source, String query) {
-    if (query.trim().isEmpty) {
-      return const [];
+    if (firstOffset == null || !mounted || document.rawText.isEmpty) {
+      return;
     }
-    return RegExp(
-      RegExp.escape(query),
-      caseSensitive: false,
-    ).allMatches(source).map((match) => match.start).toList(growable: false);
+    final ratio = firstOffset / document.rawText.length;
+    await _scrollController.animateTo(
+      _scrollController.position.maxScrollExtent * ratio,
+      duration: const Duration(milliseconds: 280),
+      curve: Curves.easeOut,
+    );
   }
 
   Future<void> _showAi(DocumentContent document, {String? initialSelection}) {
@@ -427,6 +378,82 @@ class _ReaderPageState extends ConsumerState<ReaderPage> {
       if (!mounted) return;
       messenger.showSnackBar(SnackBar(content: Text('导出失败: $e')));
     }
+  }
+}
+
+class _DocumentSearchDialog extends StatefulWidget {
+  const _DocumentSearchDialog({required this.source});
+
+  final String source;
+
+  @override
+  State<_DocumentSearchDialog> createState() => _DocumentSearchDialogState();
+}
+
+class _DocumentSearchDialogState extends State<_DocumentSearchDialog> {
+  final _controller = TextEditingController();
+  final _search = const DocumentSearch();
+  Timer? _debounce;
+  DocumentSearchResult _result = const DocumentSearchResult(count: 0);
+  var _searching = false;
+  var _requestId = 0;
+
+  @override
+  void dispose() {
+    _debounce?.cancel();
+    _controller.dispose();
+    super.dispose();
+  }
+
+  void _onChanged(String query) {
+    _debounce?.cancel();
+    final requestId = ++_requestId;
+    setState(() => _searching = query.trim().isNotEmpty);
+    _debounce = Timer(const Duration(milliseconds: 250), () async {
+      final result = await _search.search(widget.source, query);
+      if (!mounted || requestId != _requestId) {
+        return;
+      }
+      setState(() {
+        _result = result;
+        _searching = false;
+      });
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('文档内搜索'),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          TextField(
+            controller: _controller,
+            autofocus: true,
+            decoration: const InputDecoration(hintText: '关键词'),
+            onChanged: _onChanged,
+          ),
+          const SizedBox(height: AtlasSpacing.sm),
+          Align(
+            alignment: Alignment.centerLeft,
+            child: Text(_searching ? '正在搜索…' : '找到 ${_result.count} 处'),
+          ),
+        ],
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text('关闭'),
+        ),
+        FilledButton(
+          onPressed: _result.firstOffset == null
+              ? null
+              : () => Navigator.of(context).pop(_result.firstOffset),
+          child: const Text('跳转首个'),
+        ),
+      ],
+    );
   }
 }
 
