@@ -1,0 +1,4 @@
+interface:
+  display_name: "Atlas Markdown to HTML"
+  short_description: "安全、忠实地将 Markdown 转为易读 HTML"
+  default_prompt: "Use $atlas-markdown-to-html to convert this Markdown into secure, readable HTML."

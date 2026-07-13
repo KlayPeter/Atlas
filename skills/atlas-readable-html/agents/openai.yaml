@@ -1,0 +1,4 @@
+interface:
+  display_name: "Atlas Readable HTML"
+  short_description: "忠实改写正文并生成更容易理解的安全 HTML 内容"
+  default_prompt: "Use $atlas-readable-html to rewrite this document for easier reading and produce secure HTML."
