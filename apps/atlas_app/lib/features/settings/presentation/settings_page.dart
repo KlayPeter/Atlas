@@ -110,6 +110,7 @@ class _AiSettingsSectionState extends ConsumerState<_AiSettingsSection> {
   late final TextEditingController _baseUrlController;
   late final TextEditingController _modelNameController;
   late final TextEditingController _bffUrlController;
+  late final TextEditingController _bffAccessTokenController;
 
   AiSettings? _initialSettings;
 
@@ -120,6 +121,7 @@ class _AiSettingsSectionState extends ConsumerState<_AiSettingsSection> {
     _baseUrlController = TextEditingController();
     _modelNameController = TextEditingController();
     _bffUrlController = TextEditingController();
+    _bffAccessTokenController = TextEditingController();
   }
 
   @override
@@ -128,20 +130,30 @@ class _AiSettingsSectionState extends ConsumerState<_AiSettingsSection> {
     _baseUrlController.dispose();
     _modelNameController.dispose();
     _bffUrlController.dispose();
+    _bffAccessTokenController.dispose();
     super.dispose();
   }
 
   Future<void> _saveSettings() async {
-    await ref
-        .read(aiSettingsProvider.notifier)
-        .updateSettings(
-          AiSettings(
-            apiKey: _apiKeyController.text.trim(),
-            baseUrl: _baseUrlController.text.trim(),
-            modelName: _modelNameController.text.trim(),
-            bffUrl: _bffUrlController.text.trim(),
-          ),
-        );
+    try {
+      await ref
+          .read(aiSettingsProvider.notifier)
+          .updateSettings(
+            AiSettings(
+              apiKey: _apiKeyController.text.trim(),
+              baseUrl: _baseUrlController.text.trim(),
+              modelName: _modelNameController.text.trim(),
+              bffUrl: _bffUrlController.text.trim(),
+              bffAccessToken: _bffAccessTokenController.text.trim(),
+            ),
+          );
+    } on FormatException catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(error.message)));
+      return;
+    }
     if (!mounted) return;
     ScaffoldMessenger.of(
       context,
@@ -162,6 +174,7 @@ class _AiSettingsSectionState extends ConsumerState<_AiSettingsSection> {
           _baseUrlController.text = settings.baseUrl;
           _modelNameController.text = settings.modelName;
           _bffUrlController.text = settings.bffUrl;
+          _bffAccessTokenController.text = settings.bffAccessToken;
         }
 
         return Column(
@@ -173,8 +186,18 @@ class _AiSettingsSectionState extends ConsumerState<_AiSettingsSection> {
                 labelText: 'Atlas BFF 地址',
                 hintText: defaultAtlasBffUrl,
                 border: const OutlineInputBorder(),
-                helperText: '用于连接 Atlas 后端；手机上请填写电脑可访问的地址。',
+                helperText: '本机可用 HTTP；其他地址为保护文档内容必须使用 HTTPS。',
               ),
+            ),
+            const SizedBox(height: AtlasSpacing.sm),
+            TextField(
+              controller: _bffAccessTokenController,
+              decoration: const InputDecoration(
+                labelText: 'Atlas BFF 接入密钥',
+                helperText: '生产环境必填，与后端 ATLAS_BFF_ACCESS_TOKEN 一致。',
+                border: OutlineInputBorder(),
+              ),
+              obscureText: true,
             ),
             const SizedBox(height: AtlasSpacing.sm),
             TextField(

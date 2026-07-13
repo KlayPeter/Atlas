@@ -2,18 +2,21 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../ai/data/ai_secrets_repository.dart';
+import '../../ai/data/bff_endpoint_policy.dart';
 
 class AiSettings {
   final String apiKey;
   final String baseUrl;
   final String modelName;
   final String bffUrl;
+  final String bffAccessToken;
 
   const AiSettings({
     this.apiKey = '',
     this.baseUrl = '',
     this.modelName = '',
     this.bffUrl = '',
+    this.bffAccessToken = '',
   });
 
   AiSettings copyWith({
@@ -21,12 +24,14 @@ class AiSettings {
     String? baseUrl,
     String? modelName,
     String? bffUrl,
+    String? bffAccessToken,
   }) {
     return AiSettings(
       apiKey: apiKey ?? this.apiKey,
       baseUrl: baseUrl ?? this.baseUrl,
       modelName: modelName ?? this.modelName,
       bffUrl: bffUrl ?? this.bffUrl,
+      bffAccessToken: bffAccessToken ?? this.bffAccessToken,
     );
   }
 }
@@ -50,18 +55,26 @@ class AiSettingsController extends AsyncNotifier<AiSettings> {
       baseUrl: getPref(_keyBaseUrl, ''),
       modelName: getPref(_keyModelName, ''),
       bffUrl: prefs.getString(_keyBffUrl) ?? '',
+      bffAccessToken: await secrets.readBffAccessToken() ?? '',
     );
   }
 
   Future<void> updateSettings(AiSettings settings) async {
-    state = AsyncData(settings);
+    final normalizedBffUrl = settings.bffUrl.isEmpty
+        ? ''
+        : validateBffUrl(settings.bffUrl);
+    final normalized = settings.copyWith(bffUrl: normalizedBffUrl);
+    state = AsyncData(normalized);
     final prefs = await SharedPreferences.getInstance();
     await ref
         .read(aiSecretsRepositoryProvider)
-        .writeProviderApiKey(settings.apiKey);
-    await prefs.setString(_keyBaseUrl, settings.baseUrl);
-    await prefs.setString(_keyModelName, settings.modelName);
-    await prefs.setString(_keyBffUrl, settings.bffUrl);
+        .writeProviderApiKey(normalized.apiKey);
+    await ref
+        .read(aiSecretsRepositoryProvider)
+        .writeBffAccessToken(normalized.bffAccessToken);
+    await prefs.setString(_keyBaseUrl, normalized.baseUrl);
+    await prefs.setString(_keyModelName, normalized.modelName);
+    await prefs.setString(_keyBffUrl, normalized.bffUrl);
   }
 }
 

@@ -7,6 +7,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../../../domain/ai/study_models.dart';
 import '../application/ai_models.dart';
 import 'ai_secrets_repository.dart';
+import 'bff_endpoint_policy.dart';
 
 const defaultAtlasBffUrl = String.fromEnvironment(
   'ATLAS_BFF_URL',
@@ -241,7 +242,15 @@ class AiApiClient {
     Response<Map<String, Object?>> response;
     try {
       final client = await _createClient();
-      response = await client.post<Map<String, Object?>>('/v1/auth/device');
+      final accessToken = await _secrets.readBffAccessToken();
+      response = await client.post<Map<String, Object?>>(
+        '/v1/auth/device',
+        options: Options(
+          headers: accessToken == null || accessToken.isEmpty
+              ? null
+              : {'x-atlas-access-token': accessToken},
+        ),
+      );
     } on DioException catch (e) {
       throw Exception(_describeDioError(e));
     }
@@ -315,9 +324,9 @@ class AiApiClient {
     final prefs = await SharedPreferences.getInstance();
     final configured = prefs.getString(_bffUrlKey)?.trim();
     if (configured != null && configured.isNotEmpty) {
-      return configured;
+      return validateBffUrl(configured);
     }
-    return defaultBffUrl;
+    return validateBffUrl(defaultBffUrl);
   }
 }
 

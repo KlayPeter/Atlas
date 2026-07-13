@@ -45,10 +45,12 @@ void main() {
     () async {
       SharedPreferences.setMockInitialValues({});
       final secureStore = MemorySecureValueStore()
-        ..values['atlas.secure.deviceToken'] = 'stale-token';
+        ..values['atlas.secure.deviceToken'] = 'stale-token'
+        ..values['atlas.secure.bffAccessToken'] = 'enrollment-secret';
       final secrets = AiSecretsRepository(secureStore);
 
       final authHeaders = <String?>[];
+      String? enrollmentHeader;
       final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
       addTearDown(() async {
         await server.close(force: true);
@@ -56,6 +58,7 @@ void main() {
 
       server.listen((request) async {
         if (request.uri.path == '/v1/auth/device') {
+          enrollmentHeader = request.headers.value('x-atlas-access-token');
           _writeJson(request.response, {
             'ok': true,
             'data': {
@@ -119,6 +122,7 @@ void main() {
       );
 
       expect(authHeaders, ['Bearer stale-token', 'Bearer fresh-token']);
+      expect(enrollmentHeader, 'enrollment-secret');
       expect(await secrets.readDeviceToken(), 'fresh-token');
       expect(result.questions.single.question, 'What is Atlas?');
     },

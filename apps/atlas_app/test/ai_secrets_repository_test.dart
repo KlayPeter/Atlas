@@ -30,4 +30,15 @@ void main() {
     final prefs = await SharedPreferences.getInstance();
     expect(prefs.containsKey('ai_settings_api_key'), isFalse);
   });
+
+  test('stores the BFF enrollment token only in secure storage', () async {
+    SharedPreferences.setMockInitialValues({});
+    final store = MemorySecureValueStore();
+    final repository = AiSecretsRepository(store);
+
+    await repository.writeBffAccessToken('atlas-access-secret');
+
+    expect(await repository.readBffAccessToken(), 'atlas-access-secret');
+    expect(store.values['atlas.secure.bffAccessToken'], 'atlas-access-secret');
+  });
 }

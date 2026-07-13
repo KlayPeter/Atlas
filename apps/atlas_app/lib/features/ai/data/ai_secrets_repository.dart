@@ -34,6 +34,7 @@ class AiSecretsRepository {
 
   static const _providerApiKey = 'atlas.secure.aiProviderApiKey';
   static const _deviceToken = 'atlas.secure.deviceToken';
+  static const _bffAccessToken = 'atlas.secure.bffAccessToken';
   static const _legacyProviderApiKey = 'ai_settings_api_key';
   static const _legacyDeviceToken = 'atlas.auth.deviceToken';
 
@@ -59,6 +60,12 @@ class AiSecretsRepository {
     await _store.delete(_deviceToken);
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove(_legacyDeviceToken);
+  }
+
+  Future<String?> readBffAccessToken() => _store.read(_bffAccessToken);
+
+  Future<void> writeBffAccessToken(String value) {
+    return _writeSecret(_bffAccessToken, 'ai_settings_bff_access_token', value);
   }
 
   Future<String?> _readWithMigration(String secureKey, String legacyKey) async {
