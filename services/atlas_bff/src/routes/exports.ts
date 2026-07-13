@@ -1,7 +1,7 @@
 import type { Hono } from 'hono';
-import { z } from 'zod';
 
 import { requireDeviceToken } from '../middleware/auth';
+import { aiGuard } from '../middleware/ai_guard';
 import { successResponse } from '../shared/http';
 
 import { htmlEnhanceRequestSchema } from '../modules/ai/contracts';
@@ -16,7 +16,7 @@ export function registerExportRoutes(app: Hono) {
     });
   }
 
-  app.post('/v1/exports/html/enhance', requireDeviceToken(), async (context) => {
+  app.post('/v1/exports/html/enhance', requireDeviceToken(), aiGuard(), async (context) => {
     const request = htmlEnhanceRequestSchema.parse(await context.req.json());
     const result = await getProvider(context).enhanceHtml(request);
     return context.json(successResponse(result));

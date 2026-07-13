@@ -5,10 +5,11 @@ const envSchema = z
     APP_ENV: z
       .enum(['development', 'test', 'production'])
       .default('development'),
-    HOST: z.string().default('0.0.0.0'),
+    HOST: z.string().default('127.0.0.1'),
     PORT: z.coerce.number().int().positive().default(8787),
     OPENAI_API_KEY: z.string().optional(),
     OPENAI_MODEL: z.string().default('gpt-4.1-mini'),
+    AI_PROVIDER_BASE_URL_ALLOWLIST: z.string().optional(),
     DATABASE_URL: z.string().optional(),
     REDIS_URL: z.string().optional(),
   })

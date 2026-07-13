@@ -26,6 +26,15 @@ export function aiGuard(): MiddlewareHandler {
       );
     }
 
+    if (await requestBodyExceedsLimit(context.req.raw, maxBodyBytes)) {
+      throw new AppError(
+        'REQUEST_TOO_LARGE',
+        'AI request body is too large',
+        413,
+        { maxBodyBytes },
+      );
+    }
+
     const token = context.req.header('authorization') ?? 'anonymous';
     const now = Date.now();
     const bucket = requestBuckets.get(token);
@@ -45,6 +54,30 @@ export function aiGuard(): MiddlewareHandler {
     bucket.count += 1;
     await next();
   };
+}
+
+async function requestBodyExceedsLimit(request: Request, limit: number) {
+  const reader = request.clone().body?.getReader();
+  if (!reader) {
+    return false;
+  }
+
+  let total = 0;
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) {
+        return false;
+      }
+      total += value.byteLength;
+      if (total > limit) {
+        await reader.cancel();
+        return true;
+      }
+    }
+  } finally {
+    reader.releaseLock();
+  }
 }
 
 export function resetAiGuardForTests() {

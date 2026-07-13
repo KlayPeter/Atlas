@@ -83,9 +83,53 @@ describe('atlas bff', () => {
     });
     const body = await response.json();
 
-    expect(response.status).toBe(503);
+    expect(response.status).toBe(400);
     expect(body.ok).toBe(false);
-    expect(body.error.code).toBe('AI_PROVIDER_NOT_CONFIGURED');
+    expect(body.error.code).toBe('INVALID_AI_PROVIDER_CONFIG');
+  });
+
+  test('rejects provider endpoint overrides without a client-owned api key', async () => {
+    resetAiGuardForTests();
+    const app = createApp();
+    const token = await deviceToken(app);
+
+    const response = await app.request('/v1/ai/explain', {
+      method: 'POST',
+      headers: {
+        authorization: `Bearer ${token}`,
+        'content-type': 'application/json',
+        'x-ai-provider-base-url': 'https://attacker.example/v1',
+        'x-ai-provider-model': 'stolen-key-probe',
+      },
+      body: JSON.stringify(explainBody),
+    });
+    const body = await response.json();
+
+    expect(response.status).toBe(400);
+    expect(body.ok).toBe(false);
+    expect(body.error.code).toBe('INVALID_AI_PROVIDER_CONFIG');
+  });
+
+  test('rejects private-network provider endpoints to prevent SSRF', async () => {
+    resetAiGuardForTests();
+    const app = createApp();
+    const token = await deviceToken(app);
+
+    const response = await app.request('/v1/ai/explain', {
+      method: 'POST',
+      headers: {
+        authorization: `Bearer ${token}`,
+        'content-type': 'application/json',
+        'x-ai-provider-api-key': 'client-owned-key',
+        'x-ai-provider-base-url': 'http://169.254.169.254/latest',
+      },
+      body: JSON.stringify(explainBody),
+    });
+    const body = await response.json();
+
+    expect(response.status).toBe(400);
+    expect(body.ok).toBe(false);
+    expect(body.error.code).toBe('INVALID_AI_PROVIDER_CONFIG');
   });
 
   test('explain prompt focuses on selected term or sentence meaning', () => {
@@ -118,6 +162,35 @@ describe('atlas bff', () => {
         'content-length': `${65 * 1024}`,
       },
       body: JSON.stringify(explainBody),
+    });
+    const body = await response.json();
+
+    expect(response.status).toBe(413);
+    expect(body.ok).toBe(false);
+    expect(body.error.code).toBe('REQUEST_TOO_LARGE');
+  });
+
+  test('rejects oversized html enhance bodies without relying on content-length', async () => {
+    resetAiGuardForTests();
+    const app = createApp();
+    const token = await deviceToken(app);
+    const oversizedBody = JSON.stringify({
+      mode: 'summary',
+      context: {
+        documentId: 'doc_1',
+        title: 'Atlas',
+        outline: '',
+        excerpt: 'x'.repeat(70 * 1024),
+      },
+    });
+
+    const response = await app.request('/v1/exports/html/enhance', {
+      method: 'POST',
+      headers: {
+        authorization: `Bearer ${token}`,
+        'content-type': 'application/json',
+      },
+      body: oversizedBody,
     });
     const body = await response.json();
 

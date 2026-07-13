@@ -1,4 +1,5 @@
 import OpenAI from 'openai';
+import { isIP } from 'node:net';
 
 import { env } from '../../shared/env';
 import { AppError } from '../../shared/app_error';
@@ -37,7 +38,19 @@ export interface AiConfig {
 }
 
 export function createAiProvider(config?: AiConfig): AiProvider {
-  const apiKey = normalizeAiConfigValue(config?.apiKey) ?? env.OPENAI_API_KEY;
+  const clientApiKey = normalizeAiConfigValue(config?.apiKey);
+  const requestedBaseUrl = normalizeAiConfigValue(config?.baseUrl);
+  const requestedModel = normalizeAiConfigValue(config?.model);
+
+  if (!clientApiKey && (requestedBaseUrl || requestedModel)) {
+    throw new AppError(
+      'INVALID_AI_PROVIDER_CONFIG',
+      'Base URL and model overrides require a client-owned API key.',
+      400,
+    );
+  }
+
+  const apiKey = clientApiKey ?? env.OPENAI_API_KEY;
   if (!apiKey) {
     throw new AppError(
       'AI_PROVIDER_NOT_CONFIGURED',
@@ -47,9 +60,96 @@ export function createAiProvider(config?: AiConfig): AiProvider {
   }
   return new OpenAiProvider(
     apiKey,
-    normalizeAiConfigValue(config?.baseUrl),
-    normalizeAiConfigValue(config?.model),
+    requestedBaseUrl ? validateProviderBaseUrl(requestedBaseUrl) : undefined,
+    requestedModel,
   );
+}
+
+function validateProviderBaseUrl(value: string) {
+  let url: URL;
+  try {
+    url = new URL(value);
+  } catch {
+    throw new AppError(
+      'INVALID_AI_PROVIDER_CONFIG',
+      'AI provider Base URL is invalid.',
+      400,
+    );
+  }
+
+  if (url.username || url.password || url.search || url.hash) {
+    throw new AppError(
+      'INVALID_AI_PROVIDER_CONFIG',
+      'AI provider Base URL cannot contain credentials, query, or fragment.',
+      400,
+    );
+  }
+
+  const hostname = url.hostname.toLowerCase().replace(/^\[|\]$/g, '');
+  const loopback = hostname === 'localhost' || hostname === '::1' || hostname.startsWith('127.');
+  if (url.protocol !== 'https:' && !(env.APP_ENV !== 'production' && loopback && url.protocol === 'http:')) {
+    throw new AppError(
+      'INVALID_AI_PROVIDER_CONFIG',
+      'AI provider Base URL must use HTTPS; HTTP is only allowed for local development.',
+      400,
+    );
+  }
+
+  if (!loopback && isPrivateHostname(hostname)) {
+    throw new AppError(
+      'INVALID_AI_PROVIDER_CONFIG',
+      'AI provider Base URL cannot target a private network.',
+      400,
+    );
+  }
+
+  if (env.APP_ENV === 'production') {
+    const allowedOrigins = new Set(
+      (env.AI_PROVIDER_BASE_URL_ALLOWLIST ?? '')
+        .split(',')
+        .map((item) => item.trim())
+        .filter(Boolean)
+        .map((item) => new URL(item).origin),
+    );
+    if (!allowedOrigins.has(url.origin)) {
+      throw new AppError(
+        'INVALID_AI_PROVIDER_CONFIG',
+        'AI provider Base URL is not allowed by this Atlas BFF.',
+        400,
+      );
+    }
+  }
+
+  return url.toString().replace(/\/$/, '');
+}
+
+function isPrivateHostname(hostname: string) {
+  if (
+    hostname.endsWith('.local') ||
+    hostname.endsWith('.internal') ||
+    hostname === 'metadata.google.internal'
+  ) {
+    return true;
+  }
+
+  const ipVersion = isIP(hostname);
+  if (ipVersion === 4) {
+    const [first, second] = hostname.split('.').map(Number);
+    return (
+      first === 0 ||
+      first === 10 ||
+      first === 127 ||
+      (first === 100 && second >= 64 && second <= 127) ||
+      (first === 169 && second === 254) ||
+      (first === 172 && second >= 16 && second <= 31) ||
+      (first === 192 && second === 168) ||
+      first >= 224
+    );
+  }
+  if (ipVersion === 6) {
+    return hostname === '::' || hostname === '::1' || /^(fc|fd|fe8|fe9|fea|feb)/i.test(hostname);
+  }
+  return false;
 }
 
 class OpenAiProvider implements AiProvider {
