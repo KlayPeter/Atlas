@@ -63,16 +63,25 @@ export function studyPrompt(request: StudyRequest) {
 }
 
 export function htmlEnhancePrompt(request: HtmlEnhanceRequest) {
+  const readableMode = request.mode !== 'original';
   return [
-    '你是 Atlas 的文档网页设计与整理助手。你需要为当前文档生成适合 HTML 预览的结构化内容。',
-    `目标模式：${request.mode} (summary 表示总结所提供的文档内容；original 表示保留原文主线但优化导读、结构和阅读提示)`,
-    request.mode === 'summary'
-      ? 'summary 模式：重点给出清晰导读、内容摘要、章节要点、核心概念和读者可以继续追问的问题。不要声称分析了未提供的内容。'
-      : 'original 模式：不要改写原文主体，重点生成友好的网页标题、导读、章节阅读提示和核心概念，帮助原文展示更清楚。',
+    '你是 Atlas 的文档易读化编辑。你需要生成适合 HTML 预览的结构化内容。',
+    `目标模式：${request.mode}`,
+    readableMode
+      ? [
+          '生成“易读版正文”，不只是给原文添加摘要。',
+          '允许拆分长句和密集段落、用通俗语言解释术语、补充原文已支持的因果或转折关系、增加小标题和列表。',
+          '必须保留所有重要事实、数字、人名、日期、条件、结论、引用、URL、代码和不确定性；不得增加原文没有的事实、例子、动机、引用或确定性。',
+          '保持事实/观点/假设/引语之间的区别。不要改写代码、公式和引语。',
+          '`rewrittenMarkdown` 必须覆盖提供的全部正文，保持 Markdown 格式和原始顺序；不要带入“文档片段”标记。',
+        ].join('\n')
+      : '`rewrittenMarkdown` 必须逐字保留所提供正文；只生成导读、摘要和概念。',
+    '只处理实际提供的内容，不得声称看过未提供的部分。',
     '要求返回合法的 JSON 对象，必须包含：',
     '- `title`: 建议的网页标题',
     '- `lead`: 一两句话导读',
     '- `summary`: 整体摘要',
+    '- `rewrittenMarkdown`: 完整的易读版 Markdown 正文',
     '- `sections`: 数组，每个包含 `title` 和 `content`',
     '- `keyConcepts`: 数组，每个包含 `term` 和 `definition`',
     '- `questions`: 数组，每个包含 `q` 和 `a`',

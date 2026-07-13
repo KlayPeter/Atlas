@@ -29,7 +29,7 @@ export const studyRequestSchema = z.object({
 });
 
 export const htmlEnhanceRequestSchema = z.object({
-  mode: z.enum(['summary', 'original']).default('summary'),
+  mode: z.enum(['readable', 'summary', 'original']).default('readable'),
   context: documentContextSchema,
 });
 
@@ -54,6 +54,7 @@ export const htmlEnhanceResultSchema = z
     title: z.string().min(1).max(240),
     lead: z.string().min(1).max(800),
     summary: z.string().min(1).max(4000),
+    rewrittenMarkdown: z.string().min(1).max(30000),
     sections: z
       .array(
         z

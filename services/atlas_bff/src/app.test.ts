@@ -177,12 +177,13 @@ describe('atlas bff', () => {
     expect(prompt).toContain('中文翻译');
   });
 
-  test('html enhance prompt supports summary and original preview modes', () => {
-    const summaryPrompt = htmlEnhancePrompt({ ...explainBody, mode: 'summary' });
+  test('html enhance prompt supports readable and original preview modes', () => {
+    const summaryPrompt = htmlEnhancePrompt({ ...explainBody, mode: 'readable' });
     const originalPrompt = htmlEnhancePrompt({ ...explainBody, mode: 'original' });
 
-    expect(summaryPrompt).toContain('总结所提供的文档内容');
-    expect(originalPrompt).toContain('不要改写原文主体');
+    expect(summaryPrompt).toContain('易读版正文');
+    expect(summaryPrompt).toContain('不得增加原文没有的事实');
+    expect(originalPrompt).toContain('逐字保留');
     expect(summaryPrompt).toContain('不可信数据');
   });
 
@@ -192,6 +193,7 @@ describe('atlas bff', () => {
         title: 'Atlas',
         lead: '导读',
         summary: '摘要',
+        rewrittenMarkdown: '# Atlas\n\n易读正文',
         sections: [],
         keyConcepts: [],
         questions: [],
