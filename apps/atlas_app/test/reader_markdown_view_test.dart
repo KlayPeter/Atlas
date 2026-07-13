@@ -26,7 +26,6 @@ sequenceDiagram
             body: ReaderMarkdownView(
               data: markdown,
               settings: ReadingSettings(),
-              useJsMermaid: false,
             ),
           ),
         ),
@@ -55,7 +54,6 @@ sequenceDiagram
             data: '这是一段可以选择并解释的正文。',
             settings: const ReadingSettings(),
             onAiExplain: (_, _) {},
-            useJsMermaid: false,
           ),
         ),
       ),
@@ -64,6 +62,49 @@ sequenceDiagram
     final markdown = tester.widget<SmoothMarkdown>(find.byType(SmoothMarkdown));
     expect(markdown.selectable, isTrue);
     expect(markdown.contextMenuBuilder, isNotNull);
+  });
+
+  testWidgets('remote images require explicit consent before loading', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      const MaterialApp(
+        home: Scaffold(
+          body: ReaderMarkdownView(
+            data: '![cover](https://images.example/cover.png)',
+            settings: ReadingSettings(),
+          ),
+        ),
+      ),
+    );
+
+    expect(find.byType(Image), findsNothing);
+    expect(find.text('加载这张图片'), findsOneWidget);
+
+    await tester.tap(find.text('加载这张图片'));
+    await tester.pump();
+
+    expect(find.byType(Image), findsOneWidget);
+  });
+
+  testWidgets('unsafe local and HTTP image sources stay blocked', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      const MaterialApp(
+        home: Scaffold(
+          body: ReaderMarkdownView(
+            data:
+                '![local](file:///etc/passwd)\n\n![http](http://example.com/a.png)',
+            settings: ReadingSettings(),
+          ),
+        ),
+      ),
+    );
+
+    expect(find.byType(Image), findsNothing);
+    expect(find.textContaining('本地相对图片'), findsOneWidget);
+    expect(find.textContaining('非 HTTPS'), findsOneWidget);
   });
 
   testWidgets(
@@ -81,7 +122,6 @@ final expected = count(expected_handled);
             body: ReaderMarkdownView(
               data: markdown,
               settings: ReadingSettings(),
-              useJsMermaid: false,
             ),
           ),
         ),

@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:google_fonts/google_fonts.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../../app/theme/app_theme.dart';
@@ -38,12 +37,12 @@ class ReadingSettings {
   }
 
   TextStyle bodyStyle(BuildContext context) {
-    return GoogleFonts.notoSerifSc(
-      textStyle: Theme.of(context).textTheme.bodyLarge!.copyWith(
-        fontSize: fontSize,
-        height: lineHeight,
-        letterSpacing: 0.12,
-      ),
+    return Theme.of(context).textTheme.bodyLarge!.copyWith(
+      fontFamily: 'Noto Serif CJK SC',
+      fontFamilyFallback: const ['Songti SC', 'STSong', 'serif'],
+      fontSize: fontSize,
+      height: lineHeight,
+      letterSpacing: 0.12,
     );
   }
 }

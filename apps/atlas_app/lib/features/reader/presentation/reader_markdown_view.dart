@@ -1,5 +1,4 @@
 import 'dart:convert';
-import 'dart:io';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
@@ -8,10 +7,30 @@ import 'package:flutter_highlight/flutter_highlight.dart';
 import 'package:flutter_highlight/themes/atom-one-dark.dart' as atom_dark;
 import 'package:flutter_highlight/themes/github.dart' as github;
 import 'package:flutter_smooth_markdown/flutter_smooth_markdown.dart';
-import 'package:google_fonts/google_fonts.dart';
 import 'package:webview_flutter/webview_flutter.dart';
 
 import '../application/reading_settings_controller.dart';
+
+TextStyle _readerSerif(TextStyle? style) {
+  return (style ?? const TextStyle()).copyWith(
+    fontFamily: 'Noto Serif CJK SC',
+    fontFamilyFallback: const ['Songti SC', 'STSong', 'serif'],
+  );
+}
+
+TextStyle _readerSans(TextStyle? style) {
+  return (style ?? const TextStyle()).copyWith(
+    fontFamily: 'Noto Sans CJK SC',
+    fontFamilyFallback: const ['PingFang SC', 'Microsoft YaHei', 'sans-serif'],
+  );
+}
+
+TextStyle _readerMono(TextStyle? style) {
+  return (style ?? const TextStyle()).copyWith(
+    fontFamily: 'SFMono-Regular',
+    fontFamilyFallback: const ['Menlo', 'Consolas', 'monospace'],
+  );
+}
 
 class ReaderMarkdownView extends StatelessWidget {
   const ReaderMarkdownView({
@@ -20,7 +39,6 @@ class ReaderMarkdownView extends StatelessWidget {
     required this.settings,
     this.compact = false,
     this.onAiExplain,
-    this.useJsMermaid = true,
     this.headerKeys,
   });
 
@@ -28,7 +46,6 @@ class ReaderMarkdownView extends StatelessWidget {
   final ReadingSettings settings;
   final bool compact;
   final void Function(String text, Offset anchor)? onAiExplain;
-  final bool useJsMermaid;
   final Map<String, List<GlobalKey>>? headerKeys;
 
   @override
@@ -56,10 +73,7 @@ class ReaderMarkdownView extends StatelessWidget {
       builderRegistry: BuilderRegistry()
         ..register('header', _AtlasHeaderBuilder(headerKeys))
         ..register('table', const _ReaderTableBuilder())
-        ..register(
-          'mermaid',
-          _AtlasMermaidBuilder(compact: compact, useJsMermaid: useJsMermaid),
-        ),
+        ..register('mermaid', _AtlasMermaidBuilder(compact: compact)),
     );
   }
 
@@ -69,46 +83,13 @@ class ReaderMarkdownView extends StatelessWidget {
     String? alt,
     String? title,
   ) {
-    Widget image;
-    if (url.startsWith('http://') || url.startsWith('https://')) {
-      image = Image.network(url, fit: BoxFit.contain);
-    } else if (url.startsWith('file://')) {
-      image = Image.file(
-        File(Uri.parse(url).toFilePath()),
-        fit: BoxFit.contain,
-      );
-    } else {
-      final file = File(url);
-      if (file.existsSync()) {
-        image = Image.file(file, fit: BoxFit.contain);
-      } else {
-        image = Image.network(url, fit: BoxFit.contain);
-      }
+    if (url.toLowerCase().startsWith('https://')) {
+      return _ReaderRemoteImage(url: url, alt: alt);
     }
-
-    return GestureDetector(
-      onTap: () {
-        Navigator.of(context).push(
-          MaterialPageRoute(builder: (_) => _ImageFullScreenViewer(url: url)),
-        );
-      },
-      child: Container(
-        constraints: const BoxConstraints(
-          maxHeight: 500,
-          minWidth: double.infinity,
-        ),
-        margin: const EdgeInsets.symmetric(vertical: 12),
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(8),
-          border: Border.all(
-            color: Theme.of(
-              context,
-            ).colorScheme.outlineVariant.withValues(alpha: 0.5),
-          ),
-        ),
-        clipBehavior: Clip.antiAlias,
-        child: image,
-      ),
+    return _UnavailableMarkdownImage(
+      message: url.toLowerCase().startsWith('http://')
+          ? '为保护隐私，Atlas 不加载非 HTTPS 图片'
+          : '本地相对图片尚未随文档导入',
     );
   }
 
@@ -125,19 +106,24 @@ class ReaderMarkdownView extends StatelessWidget {
   ) {
     final copyButtons = selectableRegionState.contextMenuButtonItems
         .where((button) => button.type == ContextMenuButtonType.copy)
-        .map((button) => ContextMenuButtonItem(
-              label: button.label ?? '复制',
-              type: ContextMenuButtonType.copy,
-              onPressed: () {
-                final innerState = selectableRegionState.innerRegionState;
-                final delegate = selectableRegionState.registrar as SelectionContainerDelegate?;
-                final selectedText = delegate?.getSelectedContent()?.plainText.trim() ?? '';
-                if (selectedText.isNotEmpty && selectedText != '_') {
-                  Clipboard.setData(ClipboardData(text: selectedText));
-                }
-                innerState?.hideToolbar();
-              },
-            ))
+        .map(
+          (button) => ContextMenuButtonItem(
+            label: button.label ?? '复制',
+            type: ContextMenuButtonType.copy,
+            onPressed: () {
+              final innerState = selectableRegionState.innerRegionState;
+              final delegate =
+                  selectableRegionState.registrar
+                      as SelectionContainerDelegate?;
+              final selectedText =
+                  delegate?.getSelectedContent()?.plainText.trim() ?? '';
+              if (selectedText.isNotEmpty && selectedText != '_') {
+                Clipboard.setData(ClipboardData(text: selectedText));
+              }
+              innerState?.hideToolbar();
+            },
+          ),
+        )
         .toList();
 
     return AdaptiveTextSelectionToolbar.buttonItems(
@@ -148,10 +134,14 @@ class ReaderMarkdownView extends StatelessWidget {
           label: 'AI 解释',
           onPressed: () {
             final innerState = selectableRegionState.innerRegionState;
-            final delegate = selectableRegionState.registrar as SelectionContainerDelegate?;
-            String selectedText = delegate?.getSelectedContent()?.plainText.trim() ?? '';
-            
-            debugPrint('Selection: SelectedContent plainText = "$selectedText"');
+            final delegate =
+                selectableRegionState.registrar as SelectionContainerDelegate?;
+            String selectedText =
+                delegate?.getSelectedContent()?.plainText.trim() ?? '';
+
+            debugPrint(
+              'Selection: SelectedContent plainText = "$selectedText"',
+            );
 
             if (selectedText.isEmpty || selectedText == '_') {
               // Fallback for older behavior if the delegate approach fails
@@ -176,8 +166,8 @@ class ReaderMarkdownView extends StatelessWidget {
   MarkdownStyleSheet _buildStyleSheet(BuildContext context, ThemeData theme) {
     final scheme = theme.colorScheme;
     final bodyStyle = settings.bodyStyle(context);
-    final headingBase = GoogleFonts.notoSerifSc(
-      textStyle: theme.textTheme.headlineSmall?.copyWith(
+    final headingBase = _readerSerif(
+      theme.textTheme.headlineSmall?.copyWith(
         color: scheme.onSurface,
         height: 1.28,
       ),
@@ -211,26 +201,26 @@ class ReaderMarkdownView extends StatelessWidget {
             : math.max(settings.fontSize + 5, 18),
         fontWeight: FontWeight.w600,
       ),
-      h4Style: GoogleFonts.notoSansSc(
-        textStyle: theme.textTheme.titleLarge?.copyWith(
+      h4Style: _readerSans(
+        theme.textTheme.titleLarge?.copyWith(
           color: scheme.onSurface,
           fontWeight: FontWeight.w700,
         ),
       ),
-      h5Style: GoogleFonts.notoSansSc(
-        textStyle: theme.textTheme.titleMedium?.copyWith(
+      h5Style: _readerSans(
+        theme.textTheme.titleMedium?.copyWith(
           color: scheme.onSurface,
           fontWeight: FontWeight.w700,
         ),
       ),
-      h6Style: GoogleFonts.notoSansSc(
-        textStyle: theme.textTheme.titleSmall?.copyWith(
+      h6Style: _readerSans(
+        theme.textTheme.titleSmall?.copyWith(
           color: scheme.onSurface,
           fontWeight: FontWeight.w700,
         ),
       ),
-      blockquoteStyle: GoogleFonts.notoSerifSc(
-        textStyle: bodyStyle.copyWith(
+      blockquoteStyle: _readerSerif(
+        bodyStyle.copyWith(
           color: scheme.onSurfaceVariant,
           height: settings.lineHeight + 0.05,
         ),
@@ -245,39 +235,37 @@ class ReaderMarkdownView extends StatelessWidget {
         ),
         borderRadius: BorderRadius.circular(18),
       ),
-      codeBlockStyle: GoogleFonts.jetBrainsMono(
-        textStyle: TextStyle(
+      codeBlockStyle: _readerMono(
+        TextStyle(
           fontSize: settings.fontSize.clamp(8, 24),
           height: 1.72,
           color: codeForeground,
         ),
       ),
-      inlineCodeStyle: GoogleFonts.jetBrainsMono(
-        textStyle: bodyStyle.copyWith(
+      inlineCodeStyle: _readerMono(
+        bodyStyle.copyWith(
           fontSize: math.max(settings.fontSize - 1, 8),
           color: scheme.primary,
           backgroundColor: scheme.primaryContainer.withValues(alpha: 0.35),
         ),
       ),
-      linkStyle: GoogleFonts.notoSansSc(
-        textStyle: theme.textTheme.bodyLarge?.copyWith(
+      linkStyle: _readerSans(
+        theme.textTheme.bodyLarge?.copyWith(
           color: scheme.primary,
           decoration: TextDecoration.underline,
           decorationColor: scheme.primary.withValues(alpha: 0.5),
         ),
       ),
       listBulletStyle: bodyStyle,
-      tableHeaderStyle: GoogleFonts.notoSansSc(
-        textStyle: theme.textTheme.titleSmall?.copyWith(
+      tableHeaderStyle: _readerSans(
+        theme.textTheme.titleSmall?.copyWith(
           fontSize: math.max(settings.fontSize - 1, 8),
           fontWeight: FontWeight.w700,
           color: scheme.onSurface,
         ),
       ),
-      tableCellStyle: GoogleFonts.notoSansSc(
-        textStyle: bodyStyle.copyWith(
-          fontSize: math.max(settings.fontSize - 1, 8),
-        ),
+      tableCellStyle: _readerSans(
+        bodyStyle.copyWith(fontSize: math.max(settings.fontSize - 1, 8)),
       ),
       codeBlockDecoration: BoxDecoration(
         color: codeBackground,
@@ -334,7 +322,7 @@ class _ReaderCodeBlock extends StatelessWidget {
         : language!.trim().toUpperCase();
     final codeStyle =
         styleSheet.codeBlockStyle ??
-        GoogleFonts.jetBrainsMono(fontSize: settings.fontSize);
+        _readerMono(TextStyle(fontSize: settings.fontSize));
 
     return Container(
       margin: const EdgeInsets.symmetric(vertical: 14),
@@ -375,11 +363,13 @@ class _ReaderCodeBlock extends StatelessWidget {
                       ),
                       child: Text(
                         label,
-                        style: GoogleFonts.jetBrainsMono(
-                          fontSize: 11,
-                          fontWeight: FontWeight.w700,
-                          letterSpacing: 0.6,
-                          color: scheme.onPrimaryContainer,
+                        style: _readerMono(
+                          TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w700,
+                            letterSpacing: 0.6,
+                            color: scheme.onPrimaryContainer,
+                          ),
                         ),
                       ),
                     ),
@@ -462,13 +452,9 @@ class _ReaderCodeBlock extends StatelessWidget {
 }
 
 class _AtlasMermaidBuilder extends MarkdownWidgetBuilder {
-  const _AtlasMermaidBuilder({
-    required this.compact,
-    required this.useJsMermaid,
-  });
+  const _AtlasMermaidBuilder({required this.compact});
 
   final bool compact;
-  final bool useJsMermaid;
 
   @override
   bool canBuild(MarkdownNode node) => node is MermaidDiagramNode;
@@ -480,10 +466,6 @@ class _AtlasMermaidBuilder extends MarkdownWidgetBuilder {
     MarkdownRenderContext context,
   ) {
     final mermaidNode = node as MermaidDiagramNode;
-
-    if (useJsMermaid) {
-      return _MermaidJsDiagram(code: mermaidNode.code, compact: compact);
-    }
 
     return LayoutBuilder(
       builder: (context, constraints) {
@@ -946,25 +928,143 @@ class _MermaidFullScreenViewerState extends State<_MermaidFullScreenViewer> {
   }
 }
 
+class _ReaderRemoteImage extends StatefulWidget {
+  const _ReaderRemoteImage({required this.url, this.alt});
+
+  final String url;
+  final String? alt;
+
+  @override
+  State<_ReaderRemoteImage> createState() => _ReaderRemoteImageState();
+}
+
+class _ReaderRemoteImageState extends State<_ReaderRemoteImage> {
+  var _allowed = false;
+
+  @override
+  Widget build(BuildContext context) {
+    if (!_allowed) {
+      final host = Uri.tryParse(widget.url)?.host ?? '远程站点';
+      return Container(
+        width: double.infinity,
+        margin: const EdgeInsets.symmetric(vertical: 12),
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          border: Border.all(
+            color: Theme.of(context).colorScheme.outlineVariant,
+          ),
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: Column(
+          children: [
+            const Icon(Icons.image_outlined),
+            const SizedBox(height: 8),
+            Text(widget.alt?.trim().isNotEmpty == true ? widget.alt! : '远程图片'),
+            const SizedBox(height: 4),
+            Text(
+              '图片来自 $host，加载后该站点会看到你的网络请求。',
+              textAlign: TextAlign.center,
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
+            const SizedBox(height: 8),
+            OutlinedButton(
+              onPressed: () => setState(() => _allowed = true),
+              child: const Text('加载这张图片'),
+            ),
+          ],
+        ),
+      );
+    }
+
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final width = constraints.maxWidth.isFinite
+            ? constraints.maxWidth
+            : MediaQuery.sizeOf(context).width;
+        final cacheWidth = (width * MediaQuery.devicePixelRatioOf(context))
+            .round()
+            .clamp(1, 4096);
+        return GestureDetector(
+          onTap: () {
+            Navigator.of(context).push(
+              MaterialPageRoute(
+                builder: (_) => _ImageFullScreenViewer(url: widget.url),
+              ),
+            );
+          },
+          child: Container(
+            constraints: const BoxConstraints(
+              maxHeight: 500,
+              minWidth: double.infinity,
+            ),
+            margin: const EdgeInsets.symmetric(vertical: 12),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(
+                color: Theme.of(context).colorScheme.outlineVariant,
+              ),
+            ),
+            clipBehavior: Clip.antiAlias,
+            child: Image.network(
+              widget.url,
+              fit: BoxFit.contain,
+              cacheWidth: cacheWidth,
+              filterQuality: FilterQuality.medium,
+              loadingBuilder: (context, child, progress) => progress == null
+                  ? child
+                  : const SizedBox(
+                      height: 180,
+                      child: Center(child: CircularProgressIndicator()),
+                    ),
+              errorBuilder: (context, error, stackTrace) => const SizedBox(
+                height: 120,
+                child: Center(child: Text('图片加载失败')),
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+}
+
+class _UnavailableMarkdownImage extends StatelessWidget {
+  const _UnavailableMarkdownImage({required this.message});
+
+  final String message;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      margin: const EdgeInsets.symmetric(vertical: 12),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Theme.of(context).colorScheme.surfaceContainerLow,
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Row(
+        children: [
+          const Icon(Icons.broken_image_outlined),
+          const SizedBox(width: 12),
+          Expanded(child: Text(message)),
+        ],
+      ),
+    );
+  }
+}
+
 class _ImageFullScreenViewer extends StatelessWidget {
   const _ImageFullScreenViewer({required this.url});
   final String url;
 
   @override
   Widget build(BuildContext context) {
-    Widget image;
-    if (url.startsWith('http://') || url.startsWith('https://')) {
-      image = Image.network(url);
-    } else if (url.startsWith('file://')) {
-      image = Image.file(File(Uri.parse(url).toFilePath()));
-    } else {
-      final file = File(url);
-      if (file.existsSync()) {
-        image = Image.file(file);
-      } else {
-        image = Image.network(url);
-      }
-    }
+    final image = Image.network(
+      url,
+      filterQuality: FilterQuality.medium,
+      errorBuilder: (context, error, stackTrace) => const Text('图片加载失败'),
+    );
 
     final scheme = Theme.of(context).colorScheme;
 

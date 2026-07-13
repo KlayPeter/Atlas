@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:google_fonts/google_fonts.dart';
 
 final themeModeProvider = NotifierProvider<ThemeModeController, ThemeMode>(
   ThemeModeController.new,
@@ -40,30 +39,38 @@ class AtlasTheme {
       colorScheme: scheme,
       scaffoldBackgroundColor: scheme.surface,
     );
-    final textTheme = GoogleFonts.notoSansScTextTheme(base.textTheme).copyWith(
-      headlineLarge: GoogleFonts.notoSerifSc(
-        textStyle: base.textTheme.headlineLarge?.copyWith(
-          fontWeight: FontWeight.w700,
-          letterSpacing: 0,
-        ),
+    final sansTheme = base.textTheme.apply(
+      fontFamily: 'Noto Sans CJK SC',
+      fontFamilyFallback: const [
+        'PingFang SC',
+        'Microsoft YaHei',
+        'sans-serif',
+      ],
+    );
+    final textTheme = sansTheme.copyWith(
+      headlineLarge: base.textTheme.headlineLarge?.copyWith(
+        fontFamily: 'Noto Serif CJK SC',
+        fontFamilyFallback: const ['Songti SC', 'STSong', 'serif'],
+        fontWeight: FontWeight.w700,
+        letterSpacing: 0,
       ),
-      headlineMedium: GoogleFonts.notoSerifSc(
-        textStyle: base.textTheme.headlineMedium?.copyWith(
-          fontWeight: FontWeight.w700,
-          letterSpacing: 0,
-        ),
+      headlineMedium: base.textTheme.headlineMedium?.copyWith(
+        fontFamily: 'Noto Serif CJK SC',
+        fontFamilyFallback: const ['Songti SC', 'STSong', 'serif'],
+        fontWeight: FontWeight.w700,
+        letterSpacing: 0,
       ),
-      headlineSmall: GoogleFonts.notoSerifSc(
-        textStyle: base.textTheme.headlineSmall?.copyWith(
-          fontWeight: FontWeight.w700,
-          letterSpacing: 0,
-        ),
+      headlineSmall: base.textTheme.headlineSmall?.copyWith(
+        fontFamily: 'Noto Serif CJK SC',
+        fontFamilyFallback: const ['Songti SC', 'STSong', 'serif'],
+        fontWeight: FontWeight.w700,
+        letterSpacing: 0,
       ),
-      titleLarge: GoogleFonts.notoSerifSc(
-        textStyle: base.textTheme.titleLarge?.copyWith(
-          fontWeight: FontWeight.w700,
-          letterSpacing: 0,
-        ),
+      titleLarge: base.textTheme.titleLarge?.copyWith(
+        fontFamily: 'Noto Serif CJK SC',
+        fontFamilyFallback: const ['Songti SC', 'STSong', 'serif'],
+        fontWeight: FontWeight.w700,
+        letterSpacing: 0,
       ),
     );
 
