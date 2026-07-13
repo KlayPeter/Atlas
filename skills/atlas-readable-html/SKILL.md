@@ -7,6 +7,16 @@ description: Rewrite Markdown or TXT into an easier-to-understand version and th
 
 Create an easy-to-read edition, not merely a summary placed above unchanged text. Keep an exact original mode available separately.
 
+## Editing Workflow
+
+Use the smallest intervention that makes the supplied text easier to follow.
+
+1. **Faithful structure pass.** Identify the source's existing topic boundaries, definitions, steps, comparisons, and parallel items. Use headings, lists, tables, code blocks, and quotes only to reveal that structure. Do not add, remove, or reword material in this pass.
+2. **Plain-language pass.** Rewrite only where it lowers reading effort: one topic per paragraph, shorter sentences when needed, concrete subjects and verbs, direct positive statements, parallel forms for parallel ideas, and no empty filler. Retain the original term at its first plain-language explanation.
+3. **Reader-flow pass.** Check that each paragraph has a clear purpose, the transition to the next paragraph is supported by the source, and a new reader can locate the claim, evidence, and conditions. Remove generic AI phrasing, personal anecdotes, hype, and invented examples.
+
+When the original is already clear, stop after the faithful structure pass. Structural formatting must never be used to imply a relationship the source did not establish.
+
 ## Rewrite Contract
 
 Preserve:
@@ -24,6 +34,8 @@ Improve:
 - remove repetition only when no information or emphasis is lost.
 
 Never invent facts, examples, citations, certainty, motivations, or conclusions. Never silently fix disputed claims. Do not change code, formulas, quoted text, or link targets.
+
+Avoid a generic editorial voice: no puffery, promotional adjectives, fabricated reader reactions, or advice that the source does not give. Preserve the author's appropriate level of formality and uncertainty.
 
 ## Coverage Rules
 

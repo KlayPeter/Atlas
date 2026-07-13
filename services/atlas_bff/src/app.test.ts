@@ -183,6 +183,10 @@ describe('atlas bff', () => {
 
     expect(summaryPrompt).toContain('易读版正文');
     expect(summaryPrompt).toContain('不得增加原文没有的事实');
+    expect(summaryPrompt).toContain('先识别原文已有的主题边界');
+    expect(summaryPrompt).toContain('每段只推进一个主题');
+    expect(summaryPrompt).toContain('若原文已足够清楚');
+    expect(summaryPrompt).toContain('完成前按读者视角自检');
     expect(originalPrompt).toContain('逐字保留');
     expect(summaryPrompt).toContain('不可信数据');
   });
