@@ -2,6 +2,7 @@ import { describe, expect, test } from 'bun:test';
 
 import { createApp } from './app';
 import { resetAiGuardForTests } from './middleware/ai_guard';
+import { createDeviceToken, resetAuthForTests } from './middleware/auth';
 import { htmlEnhanceResultSchema } from './modules/ai/contracts';
 import { parseStructuredResponse } from './modules/ai/ai_provider';
 import { explainPrompt, htmlEnhancePrompt } from './modules/ai/prompts';
@@ -22,6 +23,25 @@ describe('atlas bff', () => {
     const authBody = await authResponse.json();
     return authBody.data.token as string;
   }
+
+  test('rejects expired device tokens', async () => {
+    resetAuthForTests();
+    const app = createApp();
+    const thirtyOneDaysAgo = Date.now() - 31 * 24 * 60 * 60 * 1000;
+    const { token } = createDeviceToken(thirtyOneDaysAgo);
+
+    const response = await app.request('/v1/ai/explain', {
+      method: 'POST',
+      headers: {
+        authorization: `Bearer ${token}`,
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify(explainBody),
+    });
+
+    expect(response.status).toBe(401);
+    expect((await response.json()).error.code).toBe('UNAUTHORIZED');
+  });
 
   test('returns health envelope', async () => {
     const app = createApp();

@@ -13,6 +13,7 @@ const requestBuckets = new Map<
     resetAt: number;
   }
 >();
+let lastBucketCleanupAt = 0;
 
 export function aiGuard(): MiddlewareHandler {
   return async (context, next) => {
@@ -37,6 +38,12 @@ export function aiGuard(): MiddlewareHandler {
 
     const token = context.req.header('authorization') ?? 'anonymous';
     const now = Date.now();
+    if (now - lastBucketCleanupAt >= windowMs) {
+      for (const [key, value] of requestBuckets) {
+        if (value.resetAt <= now) requestBuckets.delete(key);
+      }
+      lastBucketCleanupAt = now;
+    }
     const bucket = requestBuckets.get(token);
 
     if (!bucket || bucket.resetAt <= now) {
@@ -82,4 +89,5 @@ async function requestBodyExceedsLimit(request: Request, limit: number) {
 
 export function resetAiGuardForTests() {
   requestBuckets.clear();
+  lastBucketCleanupAt = 0;
 }

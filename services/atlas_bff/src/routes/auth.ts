@@ -5,11 +5,11 @@ import { successResponse } from '../shared/http';
 
 export function registerAuthRoutes(app: Hono) {
   app.post('/v1/auth/device', (context) => {
-    const token = createDeviceToken();
+    const { token, expiresAt } = createDeviceToken();
     return context.json(
       successResponse({
         token,
-        expiresAt: new Date(Date.now() + 1000 * 60 * 60 * 24 * 30).toISOString(),
+        expiresAt: new Date(expiresAt).toISOString(),
       }),
     );
   });
