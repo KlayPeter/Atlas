@@ -9,13 +9,13 @@ import { AppError } from './shared/app_error';
 import { errorResponse, successResponse } from './shared/http';
 import { ZodError } from 'zod';
 
-export function createApp() {
+export function createApp(options: { accessToken?: string } = {}) {
   const app = new Hono();
 
   app.use('*', requestLogger());
 
   registerHealthRoutes(app);
-  registerAuthRoutes(app);
+  registerAuthRoutes(app, options.accessToken);
   registerAiRoutes(app);
   registerExportRoutes(app);
 

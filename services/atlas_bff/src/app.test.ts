@@ -43,6 +43,20 @@ describe('atlas bff', () => {
     expect((await response.json()).error.code).toBe('UNAUTHORIZED');
   });
 
+  test('protects device enrollment when bff access token is configured', async () => {
+    const app = createApp({ accessToken: 'a'.repeat(32) });
+
+    const rejected = await app.request('/v1/auth/device', { method: 'POST' });
+    const accepted = await app.request('/v1/auth/device', {
+      method: 'POST',
+      headers: { 'x-atlas-access-token': 'a'.repeat(32) },
+    });
+
+    expect(rejected.status).toBe(401);
+    expect((await rejected.json()).error.code).toBe('UNAUTHORIZED');
+    expect(accepted.status).toBe(200);
+  });
+
   test('returns health envelope', async () => {
     const app = createApp();
     const response = await app.request('/health');
