@@ -969,54 +969,14 @@ class _ReaderTableBuilder extends MarkdownWidgetBuilder {
   }
 }
 
-class _ReaderRemoteImage extends StatefulWidget {
+class _ReaderRemoteImage extends StatelessWidget {
   const _ReaderRemoteImage({required this.url, this.alt});
 
   final String url;
   final String? alt;
 
   @override
-  State<_ReaderRemoteImage> createState() => _ReaderRemoteImageState();
-}
-
-class _ReaderRemoteImageState extends State<_ReaderRemoteImage> {
-  var _allowed = false;
-
-  @override
   Widget build(BuildContext context) {
-    if (!_allowed) {
-      final host = Uri.tryParse(widget.url)?.host ?? '远程站点';
-      return Container(
-        width: double.infinity,
-        margin: const EdgeInsets.symmetric(vertical: 12),
-        padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(
-          border: Border.all(
-            color: Theme.of(context).colorScheme.outlineVariant,
-          ),
-          borderRadius: BorderRadius.circular(8),
-        ),
-        child: Column(
-          children: [
-            const Icon(Icons.image_outlined),
-            const SizedBox(height: 8),
-            Text(widget.alt?.trim().isNotEmpty == true ? widget.alt! : '远程图片'),
-            const SizedBox(height: 4),
-            Text(
-              '图片来自 $host，加载后该站点会看到你的网络请求。',
-              textAlign: TextAlign.center,
-              style: Theme.of(context).textTheme.bodySmall,
-            ),
-            const SizedBox(height: 8),
-            OutlinedButton(
-              onPressed: () => setState(() => _allowed = true),
-              child: const Text('加载这张图片'),
-            ),
-          ],
-        ),
-      );
-    }
-
     return LayoutBuilder(
       builder: (context, constraints) {
         final width = constraints.maxWidth.isFinite
@@ -1029,7 +989,7 @@ class _ReaderRemoteImageState extends State<_ReaderRemoteImage> {
           onTap: () {
             Navigator.of(context).push(
               MaterialPageRoute(
-                builder: (_) => _ImageFullScreenViewer(url: widget.url),
+                builder: (_) => _ImageFullScreenViewer(url: url),
               ),
             );
           },
@@ -1047,7 +1007,7 @@ class _ReaderRemoteImageState extends State<_ReaderRemoteImage> {
             ),
             clipBehavior: Clip.antiAlias,
             child: Image.network(
-              widget.url,
+              url,
               fit: BoxFit.contain,
               cacheWidth: cacheWidth,
               filterQuality: FilterQuality.medium,
