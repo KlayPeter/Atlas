@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../app/theme/app_theme.dart';
-import '../../ai/data/ai_api_client.dart';
 import '../../reader/application/reading_settings_controller.dart';
 import '../application/ai_settings_controller.dart';
 
@@ -89,7 +88,7 @@ class SettingsPage extends ConsumerWidget {
           const SizedBox(height: AtlasSpacing.lg),
           const Divider(),
           const SizedBox(height: AtlasSpacing.md),
-          Text('AI 模型配置 (自定义)', style: Theme.of(context).textTheme.titleSmall),
+          Text('AI 模型', style: Theme.of(context).textTheme.titleSmall),
           const SizedBox(height: AtlasSpacing.sm),
           const _AiSettingsSection(),
         ],
@@ -109,8 +108,6 @@ class _AiSettingsSectionState extends ConsumerState<_AiSettingsSection> {
   late final TextEditingController _apiKeyController;
   late final TextEditingController _baseUrlController;
   late final TextEditingController _modelNameController;
-  late final TextEditingController _bffUrlController;
-  late final TextEditingController _bffAccessTokenController;
 
   AiSettings? _initialSettings;
 
@@ -120,8 +117,6 @@ class _AiSettingsSectionState extends ConsumerState<_AiSettingsSection> {
     _apiKeyController = TextEditingController();
     _baseUrlController = TextEditingController();
     _modelNameController = TextEditingController();
-    _bffUrlController = TextEditingController();
-    _bffAccessTokenController = TextEditingController();
   }
 
   @override
@@ -129,8 +124,6 @@ class _AiSettingsSectionState extends ConsumerState<_AiSettingsSection> {
     _apiKeyController.dispose();
     _baseUrlController.dispose();
     _modelNameController.dispose();
-    _bffUrlController.dispose();
-    _bffAccessTokenController.dispose();
     super.dispose();
   }
 
@@ -143,8 +136,6 @@ class _AiSettingsSectionState extends ConsumerState<_AiSettingsSection> {
               apiKey: _apiKeyController.text.trim(),
               baseUrl: _baseUrlController.text.trim(),
               modelName: _modelNameController.text.trim(),
-              bffUrl: _bffUrlController.text.trim(),
-              bffAccessToken: _bffAccessTokenController.text.trim(),
             ),
           );
     } on FormatException catch (error) {
@@ -173,37 +164,20 @@ class _AiSettingsSectionState extends ConsumerState<_AiSettingsSection> {
           _apiKeyController.text = settings.apiKey;
           _baseUrlController.text = settings.baseUrl;
           _modelNameController.text = settings.modelName;
-          _bffUrlController.text = settings.bffUrl;
-          _bffAccessTokenController.text = settings.bffAccessToken;
         }
 
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            TextField(
-              controller: _bffUrlController,
-              decoration: InputDecoration(
-                labelText: 'Atlas BFF 地址',
-                hintText: defaultAtlasBffUrl,
-                border: const OutlineInputBorder(),
-                helperText: '本机可用 HTTP；其他地址为保护文档内容必须使用 HTTPS。',
-              ),
+            Text(
+              'Atlas 不运营 AI 服务。填写你自己的模型信息后，文档片段会直接发送给该模型服务商。',
+              style: Theme.of(context).textTheme.bodySmall,
             ),
-            const SizedBox(height: AtlasSpacing.sm),
-            TextField(
-              controller: _bffAccessTokenController,
-              decoration: const InputDecoration(
-                labelText: 'Atlas BFF 接入密钥',
-                helperText: '生产环境必填，与后端 ATLAS_BFF_ACCESS_TOKEN 一致。',
-                border: OutlineInputBorder(),
-              ),
-              obscureText: true,
-            ),
-            const SizedBox(height: AtlasSpacing.sm),
+            const SizedBox(height: AtlasSpacing.md),
             TextField(
               controller: _apiKeyController,
               decoration: const InputDecoration(
-                labelText: 'API Key',
+                labelText: 'API Key（你的模型服务商）',
                 hintText: 'sk-...',
                 border: OutlineInputBorder(),
               ),
@@ -214,7 +188,8 @@ class _AiSettingsSectionState extends ConsumerState<_AiSettingsSection> {
               controller: _baseUrlController,
               decoration: const InputDecoration(
                 labelText: 'Base URL (兼容 OpenAI 接口规范)',
-                hintText: '如 https://api.deepseek.com/v1',
+                hintText: '例如 https://api.example.com/v1',
+                helperText: '仅支持 OpenAI 兼容接口；非本机地址必须使用 HTTPS。',
                 border: OutlineInputBorder(),
               ),
             ),

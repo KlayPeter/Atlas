@@ -1,169 +1,81 @@
-<div align="center">
-  <img src="apps/atlas_app/assets/images/logo.svg" width="144" height="144" alt="Atlas logo">
-  <h1>Atlas</h1>
-  <p><strong>Turn Markdown and TXT scattered across chats, drives, and repositories into reading you can actually continue.</strong></p>
-  <p>Local-first · Built for phones · AI appears only when understanding needs help</p>
-  <p>
-    <a href="https://github.com/KlayPeter/Atlas/releases"><img src="https://img.shields.io/github/v/release/KlayPeter/Atlas?display_name=tag&include_prereleases&label=release" alt="GitHub release"></a>
-    <a href="https://github.com/KlayPeter/Atlas/blob/main/LICENSE"><img src="https://img.shields.io/badge/license-MIT-2f6f68" alt="MIT license"></a>
-    <img src="https://img.shields.io/badge/Flutter-3.x-02569B?logo=flutter&logoColor=white" alt="Flutter 3.x">
-    <img src="https://img.shields.io/badge/Bun-1.x-000000?logo=bun&logoColor=white" alt="Bun 1.x">
-    <a href="CONTRIBUTING.md"><img src="https://img.shields.io/badge/PRs-welcome-2f6f68" alt="Pull requests welcome"></a>
-  </p>
-  <p>
-    <a href="README.md">简体中文</a> · <strong>English</strong>
-  </p>
-  <p>
-    <a href="docs/installation_en.md"><strong>Download & install</strong></a>
-    ·
-    <a href="#self-host-the-ai-backend"><strong>Self-host</strong></a>
-    ·
-    <a href="CONTRIBUTING.md"><strong>Contribute</strong></a>
-  </p>
-</div>
+# Atlas
 
-> Atlas is not a Markdown editor, and it does not want to become another knowledge base. It focuses on one neglected moment: **once a document reaches you, help you finish it, understand it, and take it with you.**
+Atlas is a Markdown and TXT reader for phones.
 
-## The problem Atlas tackles
+Open a local file, resume where you stopped, search it, and ask your own AI model for help when a passage is hard to understand. Reading, progress, and original HTML export stay on the device. AI requests go directly to the provider you configure.
 
-Markdown works well for writing and version control, but rarely reads well on a phone. TXT opens everywhere, yet headings, code, quotes, and context collapse into a wall of text. When a passage becomes difficult, copying it into a separate AI tool breaks the reading flow and strips away context.
+[Download and install](docs/installation_en.md) · [Configure your AI](#configure-your-own-ai) · [Contributing](CONTRIBUTING.md) · [简体中文](README.md)
 
-Atlas reconnects that flow:
+## What Atlas is for
 
-```text
-Open a local file → resume your position → search or follow the outline → explain / ask → export and share HTML
-```
+- Open Markdown and TXT from chats, cloud drives, and file managers.
+- Read technical articles, notes, meeting minutes, and study material on a phone.
+- Keep reading progress; browse headings; search; read code, tables, and Mermaid diagrams.
+- Explain or translate a selection; summarize, ask questions about, and study a document.
+- Export original HTML for sharing, or generate an AI-assisted readable version.
 
-You do not need to upload a document first, organize it into a cloud workspace, or convert it to a proprietary format. Your file remains a file. AI supports the reading action instead of becoming the entrance to it.
+Atlas is not an editor, knowledge base, or sync drive. It helps you read a file you already have.
 
-## What works today
+## How it works
 
-### Read without friction
+1. Install Atlas, tap “Open file,” or share a file to Atlas from another app.
+2. Import a `.md`, `.markdown`, or `.txt` file.
+3. Reading, search, and original HTML export work offline.
+4. Before using explanation, summary, Q&A, study mode, or AI-readable HTML, configure your own model once.
 
-- Import Markdown and TXT, keep a local copy, deduplicate by content, and maintain a recent-reading library.
-- Generate an outline, save reading progress, and return to the previous position.
-- Search the full document with result navigation; render highlighted code, scrollable tables, and Mermaid diagrams.
-- Adjust light, dark, and paper themes, plus font size, line height, and page margins.
-- On Android, open text from file managers, chat apps, and the system share sheet.
+## Configure your own AI
 
-### Understand beside the source
+Atlas does not run a public AI service or collect your model key.
 
-- Select text and explain or translate it without leaving the reader.
-- Summarize the document or ask contextual questions with streaming answers.
-- Keep AI reading history and regenerate a result.
-- Enter study mode to generate questions by difficulty, write an answer, reveal the reference answer, and self-rate.
-- Configure your API key, OpenAI-compatible base URL, model, and Atlas BFF endpoint in the app. Secrets use platform secure storage.
+Open **Settings → AI model** and enter:
 
-### Take the result with you
+- **API key** from your model provider.
+- **Base URL** for its OpenAI-compatible API, usually an address ending in `/v1`.
+- **Model name** that your key can use.
 
-- Convert the original Markdown or TXT to a standalone HTML file locally, preview it, and share it through the system sheet.
-- Optionally generate a readable AI edition with a lead, summary, concepts, section notes, and review questions.
-- Process long documents in distributed chunks instead of reading only the beginning. Original-mode export needs no AI backend.
+Atlas stores the key in the platform secure store. When you trigger an AI action, it sends only the document context needed for that action directly to your configured provider; no Atlas-operated server sits in between. Use providers you trust and review their data policies.
 
-## Local-first, stated precisely
-
-Atlas keeps the reading loop on the device. Only an explicit AI action sends the bounded context required for that task to the Atlas BFF.
-
-| Stays on the device | Sent after an explicit AI action |
-| --- | --- |
-| Original file copy, parsing, and rendering | Title, outline, and bounded text segments |
-| Recent library and reading progress | Selected text, question, or task type |
-| Reading preferences and original HTML export | Your chosen model configuration headers |
-
-The BFF handles authentication, input validation, model calls, and the response envelope. It does not own reading state. Request logs contain method, path, status, and duration—not document bodies.
+Without a model configuration, Atlas remains a complete offline reader.
 
 ```mermaid
 flowchart LR
-  A["Markdown / TXT"] --> B["Local Flutter reading pipeline"]
-  B --> C["Read, search, resume"]
-  B --> D["Original HTML export"]
-  C -->|"Explicit AI action"| E["Bounded document context"]
-  E --> F["Bun + Hono BFF"]
-  F --> G["OpenAI or compatible model"]
+  A["Markdown / TXT"] --> B["Atlas local import and reader"]
+  B --> C["Headings, search, progress, original HTML"]
+  B -->|"AI action"| D["Your model provider"]
 ```
 
-## Download and install
+## Download and build
 
-See the [download and installation page](docs/installation_en.md) for complete instructions.
-
-- **Android:** the local release APK build is verified. Public, signed packages will appear on [GitHub Releases](https://github.com/KlayPeter/Atlas/releases); the repository has not published its first release yet.
-- **iOS:** source builds are available. Native Share Extension work remains, and no TestFlight or App Store package is available today.
-
-Build Android from source:
+Production-signed Android packages will be published through [GitHub Releases](https://github.com/KlayPeter/Atlas/releases). Until the first release, build from source:
 
 ```bash
 git clone https://github.com/KlayPeter/Atlas.git
 cd Atlas/apps/atlas_app
 flutter pub get
+flutter analyze
 flutter build apk --release
 ```
 
-The APK appears at `apps/atlas_app/build/app/outputs/flutter-apk/app-release.apk`. The current template signs release builds with the debug key for local testing. Configure a dedicated Android signing key before public distribution.
-
-## Self-host the AI backend
-
-Reading, search, progress, and original HTML export work without AI. To enable AI features, deploy the Bun + Hono BFF included in this repository.
-
-### 1. Start the service
-
-```bash
-git clone https://github.com/KlayPeter/Atlas.git
-cd Atlas/services/atlas_bff
-bun install
-cp .env.example .env
-bun run typecheck
-bun run start
-```
-
-Minimum development configuration:
-
-```dotenv
-APP_ENV=development
-HOST=127.0.0.1
-PORT=8787
-OPENAI_API_KEY=your-api-key
-OPENAI_MODEL=gpt-4.1-mini
-```
-
-Check the service:
-
-```bash
-curl http://127.0.0.1:8787/health
-```
-
-### 2. Connect the app
-
-Enter the BFF address under Atlas **Settings → Custom AI configuration**. An Android emulator usually reaches the host at `http://10.0.2.2:8787`; the iOS Simulator usually uses `http://127.0.0.1:8787`.
-
-You can also set the default address at build time:
-
-```bash
-flutter run --dart-define=ATLAS_BFF_URL=http://127.0.0.1:8787
-```
-
-Production deployments must use HTTPS and set `APP_ENV=production`, `OPENAI_API_KEY`, and an `ATLAS_BFF_ACCESS_TOKEN` of at least 32 characters. Enter the same token in the app. If clients may supply an OpenAI-compatible base URL, configure `AI_PROVIDER_BASE_URL_ALLOWLIST` too.
+See [Download and install](docs/installation_en.md) for Android, iOS, and release-signing notes.
 
 ## Repository layout
 
 ```text
-apps/atlas_app/       Flutter client: import, reader, progress, AI UI, HTML export
-services/atlas_bff/   Bun + Hono BFF: auth, validation, model calls, streaming
-docs/                 Installation, MVP verification, and sample documents
-skills/               Atlas Markdown-to-HTML helper skills
+apps/atlas_app/       Flutter client: import, reading, direct AI, HTML export
+services/atlas_bff/   Optional self-hosted BFF example; not required by the client
+docs/                 Product, installation, and development documentation
 ```
 
-The Flutter client uses Riverpod for shared state and `go_router` for navigation. The BFF validates inputs with Zod and returns `{ ok, data }` / `{ ok, error }` envelopes.
+The Flutter client uses Riverpod for shared state and `go_router` for navigation. Its direct AI layer supports OpenAI-compatible Chat Completions APIs.
 
-## Project status
+## Status
 
-Atlas has completed its MVP loop: local import, reading, search, progress, contextual AI, study mode, and HTML export. Two items remain before the first public release: production Android signing and a GitHub Release, plus the iOS Share Extension.
-
-Atlas deliberately avoids a complex editor, cross-device sync, a plugin system, and heavy knowledge-base features for now. The first goal is to make opening a text file and truly reading it feel complete.
+The MVP includes local import, reading, search, progress, AI reading help, study mode, and HTML export. Before public distribution, Atlas still needs production Android signing and iOS distribution/share-import work.
 
 ## Contributing
 
-Bug fixes, interaction improvements, rendering compatibility, tests, and documentation are welcome. Read the [contribution guide](CONTRIBUTING.md) for project boundaries, setup, required checks, and the pull request checklist.
+Bug reports, rendering compatibility fixes, interaction improvements, tests, and documentation are welcome. Read the [contribution guide](CONTRIBUTING.md) before starting.
 
 ## License
 
-Atlas is available under the [MIT License](LICENSE). You may use, copy, modify, distribute, and sell the software while preserving the copyright and license notice.
+Atlas is available under the [MIT License](LICENSE).

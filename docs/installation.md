@@ -59,40 +59,17 @@ open ios/Runner.xcworkspace
 
 在 Xcode 中选择 Team 和 Bundle Identifier，再运行到模拟器或真机。当前 iOS 可运行主应用，但从系统分享菜单导入文件仍需原生 Share Extension。
 
-## 连接自己部署的 AI 后端
+## 配置自己的 AI 模型
 
-Atlas 不依赖 AI 也能阅读、搜索、保存进度和导出原文 HTML。需要解释、翻译、总结、问答、学习模式或可读版 HTML 时，再连接 Atlas BFF。
+Atlas 不依赖 AI 也能阅读、搜索、保存进度和导出原文 HTML。需要解释、翻译、总结、问答、学习模式或可读版 HTML 时，在 App 的「设置 → AI 模型」中填写自己的模型配置。
 
-### 本地启动 BFF
+- **API Key**：模型服务商发放给你的密钥。
+- **Base URL**：模型服务商提供的 OpenAI 兼容 Chat Completions 接口地址，例如以 `/v1` 结尾的地址。
+- **模型名称**：该 Key 可调用的模型名。
 
-```bash
-cd Atlas/services/atlas_bff
-bun install
-cp .env.example .env
-bun run typecheck
-bun run start
-```
+Atlas 把 API Key 存在系统安全存储。AI 请求会从设备直接发送到你填写的模型服务商，不经过 Atlas 的服务器。非本机 Base URL 必须使用 HTTPS。
 
-编辑 `.env`：
-
-```dotenv
-APP_ENV=development
-HOST=127.0.0.1
-PORT=8787
-OPENAI_API_KEY=your-api-key
-OPENAI_MODEL=gpt-4.1-mini
-```
-
-然后在 App 的「设置 → AI 模型配置」中填写 BFF 地址。Android 模拟器通常使用 `http://10.0.2.2:8787`，iOS 模拟器通常使用 `http://127.0.0.1:8787`。
-
-### 生产环境要求
-
-- 使用 HTTPS 暴露 BFF。
-- 设置 `APP_ENV=production`。
-- 设置 `OPENAI_API_KEY`。
-- 生成至少 32 个字符的 `ATLAS_BFF_ACCESS_TOKEN`，并在 App 中填写同一个值。
-- 若允许用户传入 OpenAI 兼容 Base URL，将允许的 origin 写入 `AI_PROVIDER_BASE_URL_ALLOWLIST`，多个地址以逗号分隔。
-- 不要在反向代理或应用日志中记录请求正文。
+仓库中的 `services/atlas_bff` 是供开发者研究或自行扩展的可选组件；当前 App 不需要部署或配置 BFF。
 
 ## 验证安装
 
@@ -100,6 +77,6 @@ OPENAI_MODEL=gpt-4.1-mini
 2. 检查目录、全文搜索、代码块、表格和 Mermaid 渲染。
 3. 滚动后退出并重新打开，确认恢复阅读进度。
 4. 预览并分享原文 HTML。
-5. 配置 BFF 后，再验证解释、总结、问答与学习模式。
+5. 配置自己的 AI 模型后，再验证解释、总结、问答与学习模式。
 
 完整流程见 [`mvp-verification.md`](mvp-verification.md)。

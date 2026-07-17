@@ -5,7 +5,6 @@ import 'package:atlas_app/features/ai/application/ai_models.dart';
 import 'package:atlas_app/features/ai/data/ai_api_client.dart';
 import 'package:atlas_app/features/ai/data/ai_secrets_repository.dart';
 import 'package:atlas_app/features/ai/presentation/study_page.dart';
-import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -62,11 +61,7 @@ void main() {
 
 class _FakeAiApiClient extends AiApiClient {
   _FakeAiApiClient()
-    : super(
-        Dio(),
-        defaultBffUrl: 'http://127.0.0.1:8787',
-        secrets: AiSecretsRepository(MemorySecureValueStore()),
-      );
+    : super(secrets: AiSecretsRepository(MemorySecureValueStore()));
 
   final difficulties = <String>[];
 

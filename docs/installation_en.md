@@ -59,40 +59,17 @@ open ios/Runner.xcworkspace
 
 Choose a Team and Bundle Identifier in Xcode, then run on a simulator or device. The main iOS app runs, but importing through the system share sheet still requires the native Share Extension.
 
-## Connect a self-hosted AI backend
+## Configure your own AI model
 
-Atlas reads, searches, saves progress, and exports original HTML without AI. Connect Atlas BFF only when you want explanation, translation, summaries, Q&A, study mode, or readable AI HTML.
+Atlas reads, searches, saves progress, and exports original HTML without AI. For explanation, translation, summaries, Q&A, study mode, and readable AI HTML, open **Settings → AI model** and configure your own provider.
 
-### Start BFF locally
+- **API key**: issued by your model provider.
+- **Base URL**: its OpenAI-compatible Chat Completions API address, usually ending in `/v1`.
+- **Model name**: a model available to that key.
 
-```bash
-cd Atlas/services/atlas_bff
-bun install
-cp .env.example .env
-bun run typecheck
-bun run start
-```
+Atlas stores the API key in the platform secure store. AI requests travel directly from the device to the provider you entered; they do not use an Atlas server. Non-loopback Base URLs must use HTTPS.
 
-Edit `.env`:
-
-```dotenv
-APP_ENV=development
-HOST=127.0.0.1
-PORT=8787
-OPENAI_API_KEY=your-api-key
-OPENAI_MODEL=gpt-4.1-mini
-```
-
-Enter the BFF address under **Settings → Custom AI configuration**. An Android emulator usually uses `http://10.0.2.2:8787`; the iOS Simulator usually uses `http://127.0.0.1:8787`.
-
-### Production requirements
-
-- Expose BFF over HTTPS.
-- Set `APP_ENV=production`.
-- Set `OPENAI_API_KEY`.
-- Generate an `ATLAS_BFF_ACCESS_TOKEN` of at least 32 characters and enter the same value in the app.
-- If clients may provide an OpenAI-compatible base URL, list allowed origins in `AI_PROVIDER_BASE_URL_ALLOWLIST`, separated by commas.
-- Do not log request bodies in the reverse proxy or application logs.
+`services/atlas_bff` remains an optional component for developers who want to study or extend it. The current app does not require a BFF.
 
 ## Verify the installation
 
@@ -100,6 +77,6 @@ Enter the BFF address under **Settings → Custom AI configuration**. An Android
 2. Check the outline, full-text search, code blocks, tables, and Mermaid rendering.
 3. Scroll, leave, and reopen the document to confirm progress restoration.
 4. Preview and share original HTML.
-5. After configuring BFF, verify explanation, summary, Q&A, and study mode.
+5. After configuring your own AI model, verify explanation, summary, Q&A, and study mode.
 
 See [`mvp-verification.md`](mvp-verification.md) for the complete flow.
