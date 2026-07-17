@@ -53,7 +53,7 @@ flowchart LR
 
 ## 30 秒上手
 
-1. 从 [Releases](https://github.com/KlayPeter/Atlas/releases) 下载 Android APK；尚未发布正式包时，按 [安装说明](docs/installation.md) 从源码构建。
+1. 从 [Releases](https://github.com/KlayPeter/Atlas/releases) 下载 Android APK；尚未发布正式包时，按 [安装说明](docs/installation.md) 从源码构建。iOS 暂未提供公开安装包，后续将通过 TestFlight 分发。
 2. 打开 Atlas，点击“打开文件”，选择 `.md`、`.markdown` 或 `.txt`。
 3. 直接开始读。目录、搜索、进度和原文 HTML 导出均不需要账号、云端或 AI Key。
 
@@ -98,7 +98,7 @@ flutter run
 flutter build apk --release
 ```
 
-完整的 Android、iOS、签名与安装说明见 [docs/installation.md](docs/installation.md)。
+Android 构建与签名、iOS 开发环境说明见 [docs/installation.md](docs/installation.md)。
 
 ## 项目结构
 
