@@ -105,6 +105,56 @@ void main() {
     expect(result.questions.single.question, 'Atlas 是什么？');
   });
 
+  test('question streaming yields each OpenAI-compatible SSE fragment', () async {
+    final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+    addTearDown(() => server.close(force: true));
+    String? authorization;
+    Map<String, dynamic>? body;
+
+    server.listen((request) async {
+      expect(request.uri.path, '/v1/chat/completions');
+      authorization = request.headers.value(HttpHeaders.authorizationHeader);
+      body = jsonDecode(await utf8.decoder.bind(request).join());
+      request.response.headers.contentType =
+          ContentType('text', 'event-stream', charset: 'utf-8');
+      request.response.write(
+        'data: {"choices":[{"delta":{"content":"Atlas "}}]}\n\n'
+        'data: {"choices":[{"delta":{"content":"可以直接连模型。"}}]}\n\n'
+        'data: [DONE]\n\n',
+      );
+      await request.response.close();
+    });
+
+    SharedPreferences.setMockInitialValues({
+      'ai_settings_base_url': 'http://${server.address.host}:${server.port}/v1',
+      'ai_settings_model_name': 'test-model',
+    });
+    final client = AiApiClient(
+      secrets: AiSecretsRepository(
+        MemorySecureValueStore()
+          ..values['atlas.secure.aiProviderApiKey'] = 'sk-user',
+      ),
+    );
+
+    final fragments = <String>[];
+    await for (final fragment in client.askStream(
+      context: const AiDocumentContext(
+        documentId: 'doc-1',
+        title: 'Atlas',
+        outline: '',
+        excerpt: 'Atlas 是本地优先阅读器。',
+      ),
+      question: '如何使用 AI？',
+    )) {
+      fragments.add(fragment);
+    }
+
+    expect(authorization, 'Bearer sk-user');
+    expect(body?['stream'], isTrue);
+    expect(body?['messages'][0]['content'], contains('问题：如何使用 AI？'));
+    expect(fragments.join(), 'Atlas 可以直接连模型。');
+  });
+
   test('missing model settings explains how to continue', () async {
     SharedPreferences.setMockInitialValues({});
     final client = AiApiClient(
