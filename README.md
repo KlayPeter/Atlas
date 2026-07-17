@@ -6,7 +6,7 @@
 
 <p align="center">
   <strong>把收到的 Markdown / TXT，读完。</strong><br>
-  本地导入 · 手机上继续阅读 · 用自己的 AI Key 理解难句
+  本地导入 · 手机上继续阅读 · 用 AI 理解难句
 </p>
 
 <p align="center">
@@ -44,7 +44,7 @@ flowchart LR
 
 | 你要做的事 | Atlas 怎么做 |
 | --- | --- |
-| 打开本地 Markdown / TXT | 从文件选择器或 Android 分享菜单导入，副本留在 App 沙盒 |
+| 打开本地 Markdown / TXT | 从文件选择器或 Android 分享菜单导入；可在微信中选择“用其他应用打开”并选 Atlas，副本留在 App 沙盒 |
 | 接着上次读 | 保存最近阅读和滚动位置，重新打开自动恢复 |
 | 快速找到内容 | 自动目录、全文搜索、结果定位 |
 | 读技术内容 | 代码高亮、表格横向滚动、Mermaid 图表、深浅色与护眼主题 |
@@ -54,7 +54,7 @@ flowchart LR
 ## 30 秒上手
 
 1. 从 [Releases](https://github.com/KlayPeter/Atlas/releases) 下载 Android APK；尚未发布正式包时，按 [安装说明](docs/installation.md) 从源码构建。iOS 暂未提供公开安装包，后续将通过 TestFlight 分发。
-2. 打开 Atlas，点击“打开文件”，选择 `.md`、`.markdown` 或 `.txt`。
+2. 打开 Atlas，点击“打开文件”，选择 `.md`、`.markdown` 或 `.txt`。在微信里收到这些文件时，也可选择“用其他应用打开”→ Atlas。
 3. 直接开始读。目录、搜索、进度和原文 HTML 导出均不需要账号、云端或 AI Key。
 
 ## 配置自己的 AI
