@@ -75,7 +75,7 @@ sequenceDiagram
     expect(markdown.contextMenuBuilder, isNotNull);
   });
 
-  testWidgets('remote images require explicit consent before loading', (
+  testWidgets('remote images load directly without explicit consent', (
     tester,
   ) async {
     await tester.pumpWidget(
@@ -88,12 +88,6 @@ sequenceDiagram
         ),
       ),
     );
-
-    expect(find.byType(Image), findsNothing);
-    expect(find.text('加载这张图片'), findsOneWidget);
-
-    await tester.tap(find.text('加载这张图片'));
-    await tester.pump();
 
     expect(find.byType(Image), findsOneWidget);
   });
