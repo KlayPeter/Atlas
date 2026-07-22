@@ -4,7 +4,6 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import 'package:share_plus/share_plus.dart';
 
 import '../../../app/routing/app_routes.dart';
 import '../../../app/theme/app_theme.dart';
@@ -116,7 +115,6 @@ class _ReaderPageState extends ConsumerState<ReaderPage> {
                 _showInlineExplanation(content, text, anchor, translate: true),
             onSettings: () => _showSettings(readingSettings),
             onHtml: () => _previewHtml(content),
-            onShareHtml: () => _shareHtml(content),
             headerKeys: _headerKeys,
             searchResult: _searchResult,
             activeSearchIndex: _activeSearchIndex,
@@ -348,50 +346,6 @@ class _ReaderPageState extends ConsumerState<ReaderPage> {
 
     context.push(AppRoutes.htmlPreviewPath(document.summary.id), extra: mode);
   }
-
-  Future<void> _shareHtml(DocumentContent document) async {
-    final wantEnhance = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('生成 HTML'),
-        content: const Text('是否生成 AI 易读版正文，并附带导读、摘要和思考题？这可能需要几秒钟。'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('仅导出原文'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.of(context).pop(true),
-            child: const Text('导出 AI 易读版'),
-          ),
-        ],
-      ),
-    );
-
-    if (wantEnhance == null || !mounted) return;
-
-    final messenger = ScaffoldMessenger.of(context);
-    messenger.showSnackBar(const SnackBar(content: Text('正在生成 HTML...')));
-
-    try {
-      final file = await ref
-          .read(htmlPreviewGeneratorProvider)
-          .generate(
-            document,
-            wantEnhance ? HtmlPreviewMode.readable : HtmlPreviewMode.original,
-          );
-
-      messenger.hideCurrentSnackBar();
-      if (!mounted) return;
-      await Share.shareXFiles([
-        XFile(file.path),
-      ], subject: document.summary.title);
-    } catch (e) {
-      messenger.hideCurrentSnackBar();
-      if (!mounted) return;
-      messenger.showSnackBar(SnackBar(content: Text('导出失败: $e')));
-    }
-  }
 }
 
 class _DocumentSearchDialog extends StatefulWidget {
@@ -568,7 +522,6 @@ class _ReaderScaffold extends StatelessWidget {
     required this.onAiTranslate,
     required this.onSettings,
     required this.onHtml,
-    required this.onShareHtml,
     required this.headerKeys,
     required this.searchResult,
     required this.activeSearchIndex,
@@ -585,7 +538,6 @@ class _ReaderScaffold extends StatelessWidget {
   final void Function(String text, Offset anchor) onAiTranslate;
   final VoidCallback onSettings;
   final VoidCallback onHtml;
-  final VoidCallback onShareHtml;
   final Map<String, List<GlobalKey>> headerKeys;
   final DocumentSearchResult searchResult;
   final int activeSearchIndex;
@@ -629,14 +581,11 @@ class _ReaderScaffold extends StatelessWidget {
                   onSettings();
                 case 'html':
                   onHtml();
-                case 'share':
-                  onShareHtml();
               }
             },
             itemBuilder: (context) => const [
               PopupMenuItem(value: 'settings', child: Text('阅读设置')),
               PopupMenuItem(value: 'html', child: Text('预览 HTML')),
-              PopupMenuItem(value: 'share', child: Text('分享 HTML')),
             ],
           ),
         ],

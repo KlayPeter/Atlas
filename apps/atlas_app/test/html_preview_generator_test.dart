@@ -29,6 +29,7 @@ void main() {
   test('original preview is generated without contacting AI', () async {
     var aiCalls = 0;
     HtmlEnhanceResult? writtenEnhancement;
+    String? writtenCacheKey;
     final generator = HtmlPreviewGenerator(
       enhanceHtml:
           ({
@@ -38,8 +39,9 @@ void main() {
             aiCalls += 1;
             throw StateError('AI must not run for original previews');
           },
-      writeHtml: (document, {enhance}) async {
+      writeHtml: (document, {enhance, cacheKey}) async {
         writtenEnhancement = enhance;
+        writtenCacheKey = cacheKey;
         return File('/tmp/atlas-original.html');
       },
     );
@@ -49,6 +51,7 @@ void main() {
     expect(file.path, '/tmp/atlas-original.html');
     expect(aiCalls, 0);
     expect(writtenEnhancement, isNull);
+    expect(writtenCacheKey, 'Atlas-original-hash-v1');
   });
 
   test('readable preview rewrites every bounded chunk in order', () async {
@@ -77,7 +80,7 @@ void main() {
               questions: const [],
             );
           },
-      writeHtml: (document, {enhance}) async {
+      writeHtml: (document, {enhance, cacheKey}) async {
         writtenEnhancement = enhance;
         return File('/tmp/atlas-summary.html');
       },
@@ -116,7 +119,7 @@ void main() {
             keyConcepts: [],
             questions: [],
           ),
-      writeHtml: (document, {enhance}) async {
+      writeHtml: (document, {enhance, cacheKey}) async {
         writtenEnhancement = enhance;
         return File('/tmp/atlas-sampled.html');
       },
@@ -128,6 +131,37 @@ void main() {
     expect(writtenEnhancement?.lead, contains('代表性片段'));
   });
 
+  test('cached preview skips AI and HTML generation', () async {
+    var aiCalls = 0;
+    var writeCalls = 0;
+    String? requestedCacheKey;
+    final generator = HtmlPreviewGenerator(
+      enhanceHtml:
+          ({
+            required AiDocumentContext context,
+            String mode = 'readable',
+          }) async {
+            aiCalls += 1;
+            throw StateError('AI must not run for cached previews');
+          },
+      readCachedHtml: (cacheKey) async {
+        requestedCacheKey = cacheKey;
+        return File('/tmp/atlas-cached.html');
+      },
+      writeHtml: (document, {enhance, cacheKey}) async {
+        writeCalls += 1;
+        return File('/tmp/atlas-regenerated.html');
+      },
+    );
+
+    final file = await generator.generate(document, HtmlPreviewMode.readable);
+
+    expect(file.path, '/tmp/atlas-cached.html');
+    expect(requestedCacheKey, 'Atlas-readable-hash-v1');
+    expect(aiCalls, 0);
+    expect(writeCalls, 0);
+  });
+
   testWidgets('preview generation errors replace the loading indicator', (
     tester,
   ) async {
@@ -136,7 +170,7 @@ void main() {
           ({required AiDocumentContext context, String mode = 'readable'}) {
             throw StateError('offline');
           },
-      writeHtml: (document, {enhance}) {
+      writeHtml: (document, {enhance, cacheKey}) {
         throw StateError('disk full');
       },
     );

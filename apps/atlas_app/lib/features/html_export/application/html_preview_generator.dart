@@ -18,12 +18,17 @@ typedef HtmlFileWriter =
     Future<File> Function(
       DocumentContent document, {
       HtmlEnhanceResult? enhance,
+      String? cacheKey,
     });
 
+typedef CachedHtmlLoader = Future<File?> Function(String cacheKey);
+
 final htmlPreviewGeneratorProvider = Provider<HtmlPreviewGenerator>((ref) {
+  final exportService = ref.read(htmlExportServiceProvider);
   return HtmlPreviewGenerator(
     enhanceHtml: ref.read(aiApiClientProvider).enhanceHtml,
-    writeHtml: ref.read(htmlExportServiceProvider).writeHtml,
+    readCachedHtml: exportService.readCachedHtml,
+    writeHtml: exportService.writeHtml,
   );
 });
 
@@ -31,16 +36,35 @@ class HtmlPreviewGenerator {
   const HtmlPreviewGenerator({
     required this.enhanceHtml,
     required this.writeHtml,
+    this.readCachedHtml,
   });
 
   final HtmlEnhanceLoader enhanceHtml;
   final HtmlFileWriter writeHtml;
+  final CachedHtmlLoader? readCachedHtml;
 
   Future<File> generate(DocumentContent document, HtmlPreviewMode mode) async {
+    final cacheKey = _cacheKey(document, mode);
+    final cachedFile = await readCachedHtml?.call(cacheKey);
+    if (cachedFile != null) {
+      return cachedFile;
+    }
     final enhance = mode.requiresAi
         ? await _enhanceDocument(document, mode)
         : null;
-    return writeHtml(document, enhance: enhance);
+    return writeHtml(document, enhance: enhance, cacheKey: cacheKey);
+  }
+
+  String _cacheKey(DocumentContent document, HtmlPreviewMode mode) {
+    const cacheVersion = 'v1';
+    final safeTitle = document.summary.title
+        .replaceAll(RegExp(r'[^\w\u4e00-\u9fff.-]+'), '-')
+        .replaceAll(RegExp(r'-+'), '-');
+    final shortenedTitle = String.fromCharCodes(safeTitle.runes.take(48));
+    final contentHash = document.summary.hash.isEmpty
+        ? document.summary.id
+        : document.summary.hash;
+    return '$shortenedTitle-${mode.apiValue}-$contentHash-$cacheVersion';
   }
 
   Future<HtmlEnhanceResult> _enhanceDocument(

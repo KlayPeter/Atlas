@@ -16,6 +16,16 @@ final htmlExportServiceProvider = Provider<HtmlExportService>((ref) {
 class HtmlExportService {
   const HtmlExportService();
 
+  Future<File?> readCachedHtml(String cacheKey) async {
+    final file = File(
+      '${(await _exportsDirectory()).path}/${_safeFileName(cacheKey)}.html',
+    );
+    if (!await file.exists() || await file.length() == 0) {
+      return null;
+    }
+    return file;
+  }
+
   String buildHtml(DocumentContent document, {HtmlEnhanceResult? enhance}) {
     final rewrittenMarkdown = enhance?.rewrittenMarkdown.trim() ?? '';
     final usesReadableRewrite = rewrittenMarkdown.isNotEmpty;
@@ -205,22 +215,48 @@ class HtmlExportService {
   Future<File> writeHtml(
     DocumentContent document, {
     HtmlEnhanceResult? enhance,
+    String? cacheKey,
   }) async {
+    final exportsDir = await _exportsDirectory();
+    final safeTitle = (enhance?.title ?? document.summary.title)
+        .replaceAll(RegExp(r'[^\w\u4e00-\u9fff.-]+'), '-')
+        .replaceAll(RegExp(r'-+'), '-');
+    final fileName = cacheKey == null
+        ? '${document.summary.id}-$safeTitle'
+        : _safeFileName(cacheKey);
+    final file = File('${exportsDir.path}/$fileName.html');
+    final temporaryFile = File('${file.path}.tmp');
+    try {
+      await temporaryFile.writeAsString(
+        buildHtml(document, enhance: enhance),
+        flush: true,
+      );
+      if (await file.exists()) {
+        await file.delete();
+      }
+      return temporaryFile.rename(file.path);
+    } catch (_) {
+      if (await temporaryFile.exists()) {
+        await temporaryFile.delete();
+      }
+      rethrow;
+    }
+  }
+
+  Future<Directory> _exportsDirectory() async {
     final dir = await getApplicationDocumentsDirectory();
     final exportsDir = Directory('${dir.path}/exports');
     if (!await exportsDir.exists()) {
       await exportsDir.create(recursive: true);
     }
-    final safeTitle = (enhance?.title ?? document.summary.title)
+    return exportsDir;
+  }
+
+  String _safeFileName(String value) {
+    final sanitized = value
         .replaceAll(RegExp(r'[^\w\u4e00-\u9fff.-]+'), '-')
         .replaceAll(RegExp(r'-+'), '-');
-    final file = File(
-      '${exportsDir.path}/${document.summary.id}-$safeTitle.html',
-    );
-    return file.writeAsString(
-      buildHtml(document, enhance: enhance),
-      flush: true,
-    );
+    return sanitized.isEmpty ? 'atlas-html' : sanitized;
   }
 }
 
