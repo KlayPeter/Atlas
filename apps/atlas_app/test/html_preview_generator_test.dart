@@ -193,6 +193,7 @@ void main() {
     await tester.pump();
 
     expect(find.textContaining('disk full'), findsOneWidget);
+    expect(find.text('重新生成'), findsOneWidget);
     expect(find.byType(CircularProgressIndicator), findsNothing);
   });
 }

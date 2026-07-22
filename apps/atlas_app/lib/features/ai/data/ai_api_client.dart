@@ -17,6 +17,8 @@ class AiApiClient {
 
   static const _baseUrlKey = 'ai_settings_base_url';
   static const _modelNameKey = 'ai_settings_model_name';
+  static const _htmlReceiveTimeout = Duration(seconds: 120);
+  static const _transientRetryDelay = Duration(milliseconds: 400);
 
   final AiSecretsRepository _secrets;
 
@@ -136,36 +138,54 @@ class AiApiClient {
     final content = await _complete(
       _htmlEnhancePrompt(context, mode),
       jsonResponse: true,
+      receiveTimeout: _htmlReceiveTimeout,
+      retryTransientFailure: true,
     );
     return HtmlEnhanceResult.fromJson(_decodeJsonObject(content));
   }
 
-  Future<String> _complete(String prompt, {bool jsonResponse = false}) async {
-    try {
-      final config = await _loadConfig();
-      final response = await _clientFor(config).post<Map<String, dynamic>>(
-        'chat/completions',
-        data: {
-          'model': config.modelName,
-          'messages': [
-            {'role': 'user', 'content': prompt},
-          ],
-          if (jsonResponse) 'response_format': {'type': 'json_object'},
-        },
-        options: Options(headers: {'Authorization': 'Bearer ${config.apiKey}'}),
-      );
-      final content =
-          ((response.data?['choices'] as List?)?.firstOrNull
-                  as Map?)?['message']
-              as Map?;
-      final text = content?['content'];
-      if (text is String && text.trim().isNotEmpty) {
-        return text;
+  Future<String> _complete(
+    String prompt, {
+    bool jsonResponse = false,
+    Duration? receiveTimeout,
+    bool retryTransientFailure = false,
+  }) async {
+    final config = await _loadConfig();
+    final maxAttempts = retryTransientFailure ? 2 : 1;
+    for (var attempt = 1; attempt <= maxAttempts; attempt += 1) {
+      try {
+        final response = await _clientFor(config).post<Map<String, dynamic>>(
+          'chat/completions',
+          data: {
+            'model': config.modelName,
+            'messages': [
+              {'role': 'user', 'content': prompt},
+            ],
+            if (jsonResponse) 'response_format': {'type': 'json_object'},
+          },
+          options: Options(
+            headers: {'Authorization': 'Bearer ${config.apiKey}'},
+            receiveTimeout: receiveTimeout,
+          ),
+        );
+        final content =
+            ((response.data?['choices'] as List?)?.firstOrNull
+                    as Map?)?['message']
+                as Map?;
+        final text = content?['content'];
+        if (text is String && text.trim().isNotEmpty) {
+          return text;
+        }
+        throw const FormatException('AI 没有返回可读取的内容');
+      } on DioException catch (error) {
+        if (attempt < maxAttempts && _isTransientFailure(error)) {
+          await Future<void>.delayed(_transientRetryDelay);
+          continue;
+        }
+        throw Exception(_describeDioError(error));
       }
-      throw const FormatException('AI 没有返回可读取的内容');
-    } on DioException catch (error) {
-      throw Exception(_describeDioError(error));
     }
+    throw StateError('模型请求未执行');
   }
 
   Future<_AiProviderConfig> _loadConfig() async {
@@ -199,9 +219,18 @@ class AiApiClient {
         error.type == DioExceptionType.connectionTimeout) {
       return '无法连接模型服务，请检查 Base URL 和网络连接。';
     }
+    if (error.type == DioExceptionType.receiveTimeout) {
+      return '模型生成超时，请重试；较长文档可能需要更久。';
+    }
+    if (error.type == DioExceptionType.sendTimeout) {
+      return '发送模型请求超时，请检查网络连接后重试。';
+    }
     if (error.response?.statusCode == 401 ||
         error.response?.statusCode == 403) {
       return '模型服务拒绝了 API Key，请检查设置。';
+    }
+    if (error.response?.statusCode == 429) {
+      return '模型服务繁忙或请求过于频繁，请稍后重试。';
     }
 
     final data = error.response?.data;
@@ -212,6 +241,15 @@ class AiApiClient {
       }
     }
     return '模型请求失败 (${error.response?.statusCode ?? '网络错误'})';
+  }
+
+  bool _isTransientFailure(DioException error) {
+    if (error.type == DioExceptionType.connectionError ||
+        error.type == DioExceptionType.connectionTimeout ||
+        error.type == DioExceptionType.sendTimeout) {
+      return true;
+    }
+    return const {429, 502, 503, 504}.contains(error.response?.statusCode);
   }
 }
 

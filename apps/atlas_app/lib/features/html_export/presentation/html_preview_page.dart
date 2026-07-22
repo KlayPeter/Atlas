@@ -69,7 +69,10 @@ class _HtmlPreviewPageState extends ConsumerState<HtmlPreviewPage> {
           }
 
           if (_errorMessage != null) {
-            return _HtmlPreviewError(message: _errorMessage!);
+            return _HtmlPreviewError(
+              message: _errorMessage!,
+              onRetry: () => _generatePreview(content),
+            );
           }
           if (_generating || controller == null) {
             return const Center(child: CircularProgressIndicator());
@@ -118,16 +121,30 @@ class _HtmlPreviewPageState extends ConsumerState<HtmlPreviewPage> {
 }
 
 class _HtmlPreviewError extends StatelessWidget {
-  const _HtmlPreviewError({required this.message});
+  const _HtmlPreviewError({required this.message, this.onRetry});
 
   final String message;
+  final VoidCallback? onRetry;
 
   @override
   Widget build(BuildContext context) {
     return Center(
       child: Padding(
         padding: const EdgeInsets.all(AtlasSpacing.lg),
-        child: Text(message, textAlign: TextAlign.center),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(message, textAlign: TextAlign.center),
+            if (onRetry != null) ...[
+              const SizedBox(height: AtlasSpacing.md),
+              FilledButton.icon(
+                onPressed: onRetry,
+                icon: const Icon(Icons.refresh),
+                label: const Text('重新生成'),
+              ),
+            ],
+          ],
+        ),
       ),
     );
   }
