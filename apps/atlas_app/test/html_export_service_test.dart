@@ -80,6 +80,25 @@ void main() {
     expect(html, isNot(contains('A difficult original paragraph.')));
     expect(html, contains('AI 易读版'));
   });
+
+  test('rewrite-only export omits the unused AI guide container', () {
+    final html = service.buildHtml(
+      _document('Dense original.'),
+      enhance: const HtmlEnhanceResult(
+        title: 'Atlas',
+        lead: '',
+        summary: '',
+        rewrittenMarkdown: 'Readable body.',
+        sections: [],
+        keyConcepts: [],
+        questions: [],
+      ),
+    );
+
+    expect(html, contains('Readable body.'));
+    expect(html, contains('下方正文为 AI 易读版'));
+    expect(html, isNot(contains('<h2>AI 导读</h2>')));
+  });
 }
 
 DocumentContent _document(String markdown) {

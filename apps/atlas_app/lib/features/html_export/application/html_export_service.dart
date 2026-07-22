@@ -26,6 +26,35 @@ class HtmlExportService {
     return file;
   }
 
+  Future<String?> readCachedRewrite(String cacheKey) async {
+    final file = File(
+      '${(await _rewriteCacheDirectory()).path}/${_safeFileName(cacheKey)}.md',
+    );
+    if (!await file.exists() || await file.length() == 0) {
+      return null;
+    }
+    return file.readAsString();
+  }
+
+  Future<void> writeCachedRewrite(String cacheKey, String markdown) async {
+    final file = File(
+      '${(await _rewriteCacheDirectory()).path}/${_safeFileName(cacheKey)}.md',
+    );
+    final temporaryFile = File('${file.path}.tmp');
+    try {
+      await temporaryFile.writeAsString(markdown, flush: true);
+      if (await file.exists()) {
+        await file.delete();
+      }
+      await temporaryFile.rename(file.path);
+    } catch (_) {
+      if (await temporaryFile.exists()) {
+        await temporaryFile.delete();
+      }
+      rethrow;
+    }
+  }
+
   String buildHtml(DocumentContent document, {HtmlEnhanceResult? enhance}) {
     final rewrittenMarkdown = enhance?.rewrittenMarkdown.trim() ?? '';
     final usesReadableRewrite = rewrittenMarkdown.isNotEmpty;
@@ -41,19 +70,30 @@ class HtmlExportService {
         : enhancedTitle;
 
     var enhanceHtmlStr = '';
-    if (enhance != null) {
+    final guide = enhance;
+    final hasGuide =
+        guide != null &&
+        (guide.lead.trim().isNotEmpty ||
+            guide.summary.trim().isNotEmpty ||
+            guide.sections.isNotEmpty ||
+            guide.keyConcepts.isNotEmpty ||
+            guide.questions.isNotEmpty);
+    if (hasGuide) {
       enhanceHtmlStr =
           '''
       <div class="ai-enhance">
         <h2>AI 导读</h2>
-        ${enhance.lead.trim().isEmpty ? '' : '<p class="lead"><strong>${htmlEscape.convert(enhance.lead)}</strong></p>'}
-        ${enhance.summary.trim().isEmpty ? '' : '<p>${htmlEscape.convert(enhance.summary)}</p>'}
+        ${guide.lead.trim().isEmpty ? '' : '<p class="lead"><strong>${htmlEscape.convert(guide.lead)}</strong></p>'}
+        ${guide.summary.trim().isEmpty ? '' : '<p>${htmlEscape.convert(guide.summary)}</p>'}
         ${usesReadableRewrite ? '<p class="rewrite-note">下方正文为 AI 易读版；事实、数字与结论应与原文保持一致。需要逐字版本时请选择“原文展示”。</p>' : ''}
-        ${enhance.sections.where((s) => s.title.trim().isNotEmpty || s.content.trim().isNotEmpty).map((s) => '<section><h3>${htmlEscape.convert(s.title)}</h3><p>${htmlEscape.convert(s.content)}</p></section>').join('')}
-        ${enhance.keyConcepts.isEmpty ? '' : '<h3>核心概念</h3><ul>${enhance.keyConcepts.map((k) => '<li><strong>${htmlEscape.convert(k.term)}：</strong>${htmlEscape.convert(k.definition)}</li>').join()}</ul>'}
-        ${enhance.questions.isEmpty ? '' : '<h3>思考题</h3><ul>${enhance.questions.map((q) => '<li><strong>问题：</strong>${htmlEscape.convert(q.q)}<br><strong>参考：</strong>${htmlEscape.convert(q.a)}</li>').join()}</ul>'}
+        ${guide.sections.where((s) => s.title.trim().isNotEmpty || s.content.trim().isNotEmpty).map((s) => '<section><h3>${htmlEscape.convert(s.title)}</h3><p>${htmlEscape.convert(s.content)}</p></section>').join('')}
+        ${guide.keyConcepts.isEmpty ? '' : '<h3>核心概念</h3><ul>${guide.keyConcepts.map((k) => '<li><strong>${htmlEscape.convert(k.term)}：</strong>${htmlEscape.convert(k.definition)}</li>').join()}</ul>'}
+        ${guide.questions.isEmpty ? '' : '<h3>思考题</h3><ul>${guide.questions.map((q) => '<li><strong>问题：</strong>${htmlEscape.convert(q.q)}<br><strong>参考：</strong>${htmlEscape.convert(q.a)}</li>').join()}</ul>'}
       </div>
       ''';
+    } else if (usesReadableRewrite) {
+      enhanceHtmlStr =
+          '<p class="rewrite-note">下方正文为 AI 易读版；事实、数字与结论应与原文保持一致。需要逐字版本时请选择“原文展示”。</p>';
     }
 
     return '''
@@ -250,6 +290,15 @@ class HtmlExportService {
       await exportsDir.create(recursive: true);
     }
     return exportsDir;
+  }
+
+  Future<Directory> _rewriteCacheDirectory() async {
+    final dir = await getApplicationDocumentsDirectory();
+    final cacheDir = Directory('${dir.path}/html_preview_chunks');
+    if (!await cacheDir.exists()) {
+      await cacheDir.create(recursive: true);
+    }
+    return cacheDir;
   }
 
   String _safeFileName(String value) {

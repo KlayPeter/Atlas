@@ -30,6 +30,7 @@ class _HtmlPreviewPageState extends ConsumerState<HtmlPreviewPage> {
   bool _generating = true;
   bool _hasStartedGeneration = false;
   String? _errorMessage;
+  String? _progressMessage;
 
   @override
   Widget build(BuildContext context) {
@@ -75,7 +76,18 @@ class _HtmlPreviewPageState extends ConsumerState<HtmlPreviewPage> {
             );
           }
           if (_generating || controller == null) {
-            return const Center(child: CircularProgressIndicator());
+            return Center(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const CircularProgressIndicator(),
+                  if (_progressMessage != null) ...[
+                    const SizedBox(height: AtlasSpacing.md),
+                    Text(_progressMessage!),
+                  ],
+                ],
+              ),
+            );
           }
           return WebViewWidget(controller: controller);
         },
@@ -89,12 +101,22 @@ class _HtmlPreviewPageState extends ConsumerState<HtmlPreviewPage> {
       _errorMessage = null;
       _controller = null;
       _filePath = null;
+      _progressMessage = widget.mode.requiresAi ? '正在准备 AI 易读版…' : null;
     });
 
     try {
       final file = await ref
           .read(htmlPreviewGeneratorProvider)
-          .generate(content, widget.mode);
+          .generate(
+            content,
+            widget.mode,
+            onProgress: (completed, total) {
+              if (!mounted) return;
+              setState(() {
+                _progressMessage = '正在改写 $completed/$total 段…';
+              });
+            },
+          );
       if (!mounted) {
         return;
       }
@@ -105,6 +127,7 @@ class _HtmlPreviewPageState extends ConsumerState<HtmlPreviewPage> {
         _filePath = file.path;
         _controller = controller;
         _generating = false;
+        _progressMessage = null;
       });
     } catch (error) {
       if (!mounted) {
@@ -112,8 +135,9 @@ class _HtmlPreviewPageState extends ConsumerState<HtmlPreviewPage> {
       }
       setState(() {
         _generating = false;
+        _progressMessage = null;
         _errorMessage = widget.mode.requiresAi
-            ? '生成失败：$error\n\n请检查 Atlas BFF 和 AI 模型配置。'
+            ? '生成失败：$error\n\n请检查模型配置和网络连接，或点击重新生成。'
             : '生成失败：$error';
       });
     }

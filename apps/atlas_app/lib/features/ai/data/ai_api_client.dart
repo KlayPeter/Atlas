@@ -131,17 +131,21 @@ class AiApiClient {
     return StudyResult.fromJson({...data, 'difficulty': difficulty});
   }
 
-  Future<HtmlEnhanceResult> enhanceHtml({
+  Future<String> rewriteHtml({
     required AiDocumentContext context,
-    String mode = 'readable',
+    required int chunkIndex,
+    required int chunkCount,
   }) async {
     final content = await _complete(
-      _htmlEnhancePrompt(context, mode),
-      jsonResponse: true,
+      _htmlRewritePrompt(context, chunkIndex, chunkCount),
       receiveTimeout: _htmlReceiveTimeout,
       retryTransientFailure: true,
     );
-    return HtmlEnhanceResult.fromJson(_decodeJsonObject(content));
+    final rewritten = _stripMarkdownWrapper(content);
+    if (rewritten.isEmpty) {
+      throw const FormatException('AI 没有返回改写后的正文');
+    }
+    return rewritten;
   }
 
   Future<String> _complete(
@@ -393,17 +397,31 @@ String _studyPrompt(AiDocumentContext context, String difficulty) {
   ].join('\n\n');
 }
 
-String _htmlEnhancePrompt(AiDocumentContext context, String mode) {
+String _htmlRewritePrompt(
+  AiDocumentContext context,
+  int chunkIndex,
+  int chunkCount,
+) {
   return [
-    '你是 Atlas 的文档易读化编辑。你需要生成适合 HTML 预览的结构化内容。',
-    '目标模式：$mode',
-    '生成易读版正文，但不得增加原文没有的事实、例子、动机、引用或确定性。',
-    '必须保留重要事实、数字、人名、日期、条件、结论、引用、URL 和代码。',
-    '`rewrittenMarkdown` 必须覆盖提供的全部正文，保持 Markdown 格式和原始顺序。',
-    '要求返回合法 JSON：title、lead、summary、rewrittenMarkdown、sections、keyConcepts、questions。',
-    '不要输出 Markdown 代码围栏或 JSON 以外的任何文字。',
+    '你是 Atlas 的高保真文本简化编辑。请把当前片段改写得更容易阅读，但这不是摘要。',
+    '必须完整覆盖原文信息，不得删除重要内容，不得增加原文没有的事实、例子、动机、引用或确定性。',
+    '保留原始顺序、标题层级、列表、表格、链接、数字、人名、日期、条件和结论。',
+    '代码、公式、URL、引用内容和 Markdown 代码块必须原样保留。',
+    '优先拆分过长句子、解释原文已有的专业表达、使用更直接的措辞；不要添加导读、摘要、问答或点评。',
+    '只返回改写后的 Markdown 正文，不要使用包裹全文的 Markdown 代码围栏。',
     _untrustedContentRule,
     '原文档标题：${context.title}',
-    '原文档片段：\n${context.excerpt}',
+    '文档结构：\n${context.outline}',
+    '当前片段：${chunkIndex + 1}/$chunkCount',
+    '待改写正文：\n${context.excerpt}',
   ].join('\n\n');
+}
+
+String _stripMarkdownWrapper(String content) {
+  final normalized = content.trim();
+  final match = RegExp(
+    r'^```(?:markdown|md)\s*\n([\s\S]*?)\n```$',
+    caseSensitive: false,
+  ).firstMatch(normalized);
+  return (match?.group(1) ?? normalized).trim();
 }

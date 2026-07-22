@@ -31,10 +31,11 @@ void main() {
     HtmlEnhanceResult? writtenEnhancement;
     String? writtenCacheKey;
     final generator = HtmlPreviewGenerator(
-      enhanceHtml:
+      rewriteHtml:
           ({
             required AiDocumentContext context,
-            String mode = 'readable',
+            required int chunkIndex,
+            required int chunkCount,
           }) async {
             aiCalls += 1;
             throw StateError('AI must not run for original previews');
@@ -51,11 +52,14 @@ void main() {
     expect(file.path, '/tmp/atlas-original.html');
     expect(aiCalls, 0);
     expect(writtenEnhancement, isNull);
-    expect(writtenCacheKey, 'Atlas-original-hash-v1');
+    expect(writtenCacheKey, 'Atlas-original-hash-v2');
   });
 
-  test('readable preview rewrites every bounded chunk in order', () async {
+  test('readable preview rewrites chunks in order with two workers', () async {
     var aiCalls = 0;
+    var activeCalls = 0;
+    var maxActiveCalls = 0;
+    final progress = <String>[];
     HtmlEnhanceResult? writtenEnhancement;
     final longDocument = DocumentContent(
       summary: document.summary,
@@ -64,21 +68,18 @@ void main() {
       paragraphs: const [],
     );
     final generator = HtmlPreviewGenerator(
-      enhanceHtml:
+      rewriteHtml:
           ({
             required AiDocumentContext context,
-            String mode = 'readable',
+            required int chunkIndex,
+            required int chunkCount,
           }) async {
             aiCalls += 1;
-            return HtmlEnhanceResult(
-              title: 'Atlas',
-              lead: '导读 $aiCalls',
-              summary: '摘要 $aiCalls',
-              rewrittenMarkdown: '易读正文 $aiCalls',
-              sections: const [],
-              keyConcepts: const [],
-              questions: const [],
-            );
+            activeCalls += 1;
+            if (activeCalls > maxActiveCalls) maxActiveCalls = activeCalls;
+            await Future<void>.delayed(const Duration(milliseconds: 10));
+            activeCalls -= 1;
+            return '易读正文 ${chunkIndex + 1}';
           },
       writeHtml: (document, {enhance, cacheKey}) async {
         writtenEnhancement = enhance;
@@ -86,19 +87,25 @@ void main() {
       },
     );
 
-    await generator.generate(longDocument, HtmlPreviewMode.readable);
+    await generator.generate(
+      longDocument,
+      HtmlPreviewMode.readable,
+      onProgress: (completed, total) => progress.add('$completed/$total'),
+    );
 
     expect(aiCalls, 4);
-    expect(writtenEnhancement?.summary, contains('第 4 部分：摘要 4'));
-    expect(writtenEnhancement?.lead, contains('覆盖文档内容'));
+    expect(maxActiveCalls, 2);
+    expect(progress.last, '4/4');
+    expect(writtenEnhancement?.summary, isEmpty);
+    expect(writtenEnhancement?.lead, isEmpty);
     expect(
       writtenEnhancement?.rewrittenMarkdown,
       '易读正文 1\n\n易读正文 2\n\n易读正文 3\n\n易读正文 4',
     );
   });
 
-  test('sampled long documents keep the exact original body', () async {
-    HtmlEnhanceResult? writtenEnhancement;
+  test('documents beyond the rewrite limit do not spend AI tokens', () async {
+    var aiCalls = 0;
     final longDocument = DocumentContent(
       summary: document.summary,
       rawText: List.filled(80000, 'x').join(),
@@ -106,29 +113,65 @@ void main() {
       paragraphs: const [],
     );
     final generator = HtmlPreviewGenerator(
-      enhanceHtml:
+      rewriteHtml:
           ({
             required AiDocumentContext context,
-            String mode = 'readable',
-          }) async => const HtmlEnhanceResult(
-            title: 'Atlas',
-            lead: '导读',
-            summary: '摘要',
-            rewrittenMarkdown: '局部改写',
-            sections: [],
-            keyConcepts: [],
-            questions: [],
-          ),
+            required int chunkIndex,
+            required int chunkCount,
+          }) async {
+            aiCalls += 1;
+            return '不应生成';
+          },
+      writeHtml: (document, {enhance, cacheKey}) async {
+        return File('/tmp/atlas-too-long.html');
+      },
+    );
+
+    await expectLater(
+      generator.generate(longDocument, HtmlPreviewMode.readable),
+      throwsA(isA<StateError>()),
+    );
+
+    expect(aiCalls, 0);
+  });
+
+  test('cached chunks resume without repeating successful AI work', () async {
+    var aiCalls = 0;
+    final cachedKeys = <String>[];
+    HtmlEnhanceResult? writtenEnhancement;
+    final longDocument = DocumentContent(
+      summary: document.summary,
+      rawText: List.filled(12000, 'x').join(),
+      sections: const [],
+      paragraphs: const [],
+    );
+    final generator = HtmlPreviewGenerator(
+      rewriteHtml:
+          ({
+            required AiDocumentContext context,
+            required int chunkIndex,
+            required int chunkCount,
+          }) async {
+            aiCalls += 1;
+            return '新段 ${chunkIndex + 1}';
+          },
+      readCachedRewrite: (cacheKey) async {
+        return cacheKey.endsWith('part-0') ? '已缓存第 1 段' : null;
+      },
+      writeCachedRewrite: (cacheKey, markdown) async {
+        cachedKeys.add(cacheKey);
+      },
       writeHtml: (document, {enhance, cacheKey}) async {
         writtenEnhancement = enhance;
-        return File('/tmp/atlas-sampled.html');
+        return File('/tmp/atlas-resumed.html');
       },
     );
 
     await generator.generate(longDocument, HtmlPreviewMode.readable);
 
-    expect(writtenEnhancement?.rewrittenMarkdown, isEmpty);
-    expect(writtenEnhancement?.lead, contains('代表性片段'));
+    expect(aiCalls, 1);
+    expect(cachedKeys.single, endsWith('part-1'));
+    expect(writtenEnhancement?.rewrittenMarkdown, '已缓存第 1 段\n\n新段 2');
   });
 
   test('cached preview skips AI and HTML generation', () async {
@@ -136,10 +179,11 @@ void main() {
     var writeCalls = 0;
     String? requestedCacheKey;
     final generator = HtmlPreviewGenerator(
-      enhanceHtml:
+      rewriteHtml:
           ({
             required AiDocumentContext context,
-            String mode = 'readable',
+            required int chunkIndex,
+            required int chunkCount,
           }) async {
             aiCalls += 1;
             throw StateError('AI must not run for cached previews');
@@ -157,7 +201,7 @@ void main() {
     final file = await generator.generate(document, HtmlPreviewMode.readable);
 
     expect(file.path, '/tmp/atlas-cached.html');
-    expect(requestedCacheKey, 'Atlas-readable-hash-v1');
+    expect(requestedCacheKey, 'Atlas-readable-hash-v2');
     expect(aiCalls, 0);
     expect(writeCalls, 0);
   });
@@ -166,8 +210,12 @@ void main() {
     tester,
   ) async {
     final generator = HtmlPreviewGenerator(
-      enhanceHtml:
-          ({required AiDocumentContext context, String mode = 'readable'}) {
+      rewriteHtml:
+          ({
+            required AiDocumentContext context,
+            required int chunkIndex,
+            required int chunkCount,
+          }) {
             throw StateError('offline');
           },
       writeHtml: (document, {enhance, cacheKey}) {

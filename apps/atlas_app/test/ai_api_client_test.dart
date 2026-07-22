@@ -105,62 +105,59 @@ void main() {
     expect(result.questions.single.question, 'Atlas 是什么？');
   });
 
-  test('HTML enhancement retries one transient provider failure', () async {
-    final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
-    addTearDown(() => server.close(force: true));
-    var requestCount = 0;
+  test(
+    'HTML rewrite retries once and requests Markdown instead of JSON',
+    () async {
+      final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+      addTearDown(() => server.close(force: true));
+      var requestCount = 0;
 
-    server.listen((request) async {
-      requestCount += 1;
-      if (requestCount == 1) {
-        request.response.statusCode = HttpStatus.serviceUnavailable;
+      server.listen((request) async {
+        requestCount += 1;
+        if (requestCount == 1) {
+          request.response.statusCode = HttpStatus.serviceUnavailable;
+          _writeJson(request.response, {
+            'error': {'message': 'temporarily unavailable'},
+          });
+          return;
+        }
+        final body = jsonDecode(await utf8.decoder.bind(request).join());
+        expect(body, isNot(contains('response_format')));
         _writeJson(request.response, {
-          'error': {'message': 'temporarily unavailable'},
-        });
-        return;
-      }
-      _writeJson(request.response, {
-        'choices': [
-          {
-            'message': {
-              'content': jsonEncode({
-                'title': 'Atlas',
-                'lead': '导读',
-                'summary': '摘要',
-                'rewrittenMarkdown': '# Atlas\n\n易读正文',
-                'sections': <Object?>[],
-                'keyConcepts': <Object?>[],
-                'questions': <Object?>[],
-              }),
+          'choices': [
+            {
+              'message': {'content': '# Atlas\n\n易读正文'},
             },
-          },
-        ],
+          ],
+        });
       });
-    });
 
-    SharedPreferences.setMockInitialValues({
-      'ai_settings_base_url': 'http://${server.address.host}:${server.port}',
-      'ai_settings_model_name': 'test-model',
-    });
-    final client = AiApiClient(
-      secrets: AiSecretsRepository(
-        MemorySecureValueStore()
-          ..values['atlas.secure.aiProviderApiKey'] = 'sk-user',
-      ),
-    );
+      SharedPreferences.setMockInitialValues({
+        'ai_settings_base_url': 'http://${server.address.host}:${server.port}',
+        'ai_settings_model_name': 'test-model',
+      });
+      final client = AiApiClient(
+        secrets: AiSecretsRepository(
+          MemorySecureValueStore()
+            ..values['atlas.secure.aiProviderApiKey'] = 'sk-user',
+        ),
+      );
 
-    final result = await client.enhanceHtml(
-      context: const AiDocumentContext(
-        documentId: 'doc-1',
-        title: 'Atlas',
-        outline: '',
-        excerpt: 'Atlas 是本地优先阅读器。',
-      ),
-    );
+      final result = await client.rewriteHtml(
+        context: const AiDocumentContext(
+          documentId: 'doc-1',
+          title: 'Atlas',
+          outline: '',
+          excerpt: 'Atlas 是本地优先阅读器。',
+        ),
+        chunkIndex: 0,
+        chunkCount: 1,
+      );
 
-    expect(requestCount, 2);
-    expect(result.rewrittenMarkdown, contains('易读正文'));
-  });
+      expect(requestCount, 2);
+      expect(result, contains('易读正文'));
+    },
+  );
 
   test('question streaming yields each OpenAI-compatible SSE fragment', () async {
     final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);

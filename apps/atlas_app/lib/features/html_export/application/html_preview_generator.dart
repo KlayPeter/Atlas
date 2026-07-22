@@ -8,10 +8,11 @@ import '../../ai/application/ai_models.dart';
 import '../../ai/data/ai_api_client.dart';
 import 'html_export_service.dart';
 
-typedef HtmlEnhanceLoader =
-    Future<HtmlEnhanceResult> Function({
+typedef HtmlRewriteLoader =
+    Future<String> Function({
       required AiDocumentContext context,
-      String mode,
+      required int chunkIndex,
+      required int chunkCount,
     });
 
 typedef HtmlFileWriter =
@@ -22,41 +23,57 @@ typedef HtmlFileWriter =
     });
 
 typedef CachedHtmlLoader = Future<File?> Function(String cacheKey);
+typedef CachedRewriteLoader = Future<String?> Function(String cacheKey);
+typedef RewriteCacheWriter =
+    Future<void> Function(String cacheKey, String markdown);
+typedef HtmlGenerationProgress = void Function(int completed, int total);
 
 final htmlPreviewGeneratorProvider = Provider<HtmlPreviewGenerator>((ref) {
   final exportService = ref.read(htmlExportServiceProvider);
   return HtmlPreviewGenerator(
-    enhanceHtml: ref.read(aiApiClientProvider).enhanceHtml,
+    rewriteHtml: ref.read(aiApiClientProvider).rewriteHtml,
     readCachedHtml: exportService.readCachedHtml,
+    readCachedRewrite: exportService.readCachedRewrite,
+    writeCachedRewrite: exportService.writeCachedRewrite,
     writeHtml: exportService.writeHtml,
   );
 });
 
 class HtmlPreviewGenerator {
   const HtmlPreviewGenerator({
-    required this.enhanceHtml,
+    required this.rewriteHtml,
     required this.writeHtml,
     this.readCachedHtml,
+    this.readCachedRewrite,
+    this.writeCachedRewrite,
   });
 
-  final HtmlEnhanceLoader enhanceHtml;
+  static const _maxConcurrentRewrites = 2;
+
+  final HtmlRewriteLoader rewriteHtml;
   final HtmlFileWriter writeHtml;
   final CachedHtmlLoader? readCachedHtml;
+  final CachedRewriteLoader? readCachedRewrite;
+  final RewriteCacheWriter? writeCachedRewrite;
 
-  Future<File> generate(DocumentContent document, HtmlPreviewMode mode) async {
+  Future<File> generate(
+    DocumentContent document,
+    HtmlPreviewMode mode, {
+    HtmlGenerationProgress? onProgress,
+  }) async {
     final cacheKey = _cacheKey(document, mode);
     final cachedFile = await readCachedHtml?.call(cacheKey);
     if (cachedFile != null) {
       return cachedFile;
     }
     final enhance = mode.requiresAi
-        ? await _enhanceDocument(document, mode)
+        ? await _rewriteDocument(document, cacheKey, onProgress)
         : null;
     return writeHtml(document, enhance: enhance, cacheKey: cacheKey);
   }
 
   String _cacheKey(DocumentContent document, HtmlPreviewMode mode) {
-    const cacheVersion = 'v1';
+    const cacheVersion = 'v2';
     final safeTitle = document.summary.title
         .replaceAll(RegExp(r'[^\w\u4e00-\u9fff.-]+'), '-')
         .replaceAll(RegExp(r'-+'), '-');
@@ -67,53 +84,77 @@ class HtmlPreviewGenerator {
     return '$shortenedTitle-${mode.apiValue}-$contentHash-$cacheVersion';
   }
 
-  Future<HtmlEnhanceResult> _enhanceDocument(
+  Future<HtmlEnhanceResult> _rewriteDocument(
     DocumentContent document,
-    HtmlPreviewMode mode,
+    String cacheKey,
+    HtmlGenerationProgress? onProgress,
   ) async {
-    final chunks = AiDocumentContext.htmlChunks(document);
-    final results = <HtmlEnhanceResult>[];
-    for (final context in chunks.contexts) {
-      results.add(await enhanceHtml(context: context, mode: mode.apiValue));
+    final chunks = _rewriteChunks(document);
+    if (chunks.sampled) {
+      throw StateError(
+        '文档过长，AI 易读版暂时最多处理 ${AiDocumentContext.maxHtmlChunks} 个分段',
+      );
     }
-    if (results.length == 1) {
-      return results.single;
-    }
-    return _mergeEnhancements(results, sampled: chunks.sampled);
-  }
 
-  HtmlEnhanceResult _mergeEnhancements(
-    List<HtmlEnhanceResult> results, {
-    required bool sampled,
-  }) {
-    final concepts = <String, HtmlEnhanceKeyConcept>{};
-    for (final result in results) {
-      for (final concept in result.keyConcepts) {
-        concepts.putIfAbsent(concept.term.trim().toLowerCase(), () => concept);
+    final total = chunks.contexts.length;
+    final results = List<String?>.filled(total, null);
+    var nextIndex = 0;
+    var completed = 0;
+
+    Future<void> worker() async {
+      while (nextIndex < total) {
+        final index = nextIndex;
+        nextIndex += 1;
+        final chunkCacheKey = '$cacheKey-part-$index';
+        final cached = await readCachedRewrite?.call(chunkCacheKey);
+        final markdown = cached?.trim().isNotEmpty == true
+            ? cached!
+            : await rewriteHtml(
+                context: chunks.contexts[index],
+                chunkIndex: index,
+                chunkCount: total,
+              );
+        if (cached?.trim().isNotEmpty != true) {
+          await writeCachedRewrite?.call(chunkCacheKey, markdown);
+        }
+        results[index] = markdown;
+        completed += 1;
+        onProgress?.call(completed, total);
       }
     }
 
-    final coverage = sampled
-        ? '本文较长，以下导读基于分布于全文的 ${results.length} 个代表性片段。'
-        : '以下导读已分 ${results.length} 个片段覆盖文档内容。';
-    final summaries = <String>[coverage];
-    for (var index = 0; index < results.length; index += 1) {
-      summaries.add('第 ${index + 1} 部分：${results[index].summary}');
-    }
+    final workerCount = total < _maxConcurrentRewrites
+        ? total
+        : _maxConcurrentRewrites;
+    await Future.wait(List.generate(workerCount, (_) => worker()));
 
     return HtmlEnhanceResult(
-      title: results.first.title,
-      lead: '$coverage ${results.first.lead}',
-      summary: summaries.join('\n'),
-      rewrittenMarkdown: sampled
-          ? ''
-          : results
-                .map((result) => result.rewrittenMarkdown.trim())
-                .where((value) => value.isNotEmpty)
-                .join('\n\n'),
-      sections: results.expand((result) => result.sections).take(20).toList(),
-      keyConcepts: concepts.values.take(20).toList(),
-      questions: results.expand((result) => result.questions).take(10).toList(),
+      title: document.summary.title,
+      lead: '',
+      summary: '',
+      rewrittenMarkdown: results.cast<String>().join('\n\n'),
+      sections: const [],
+      keyConcepts: const [],
+      questions: const [],
+    );
+  }
+
+  AiDocumentChunks _rewriteChunks(DocumentContent document) {
+    final ranges = document.renderRanges;
+    if (ranges.isEmpty || ranges.length > AiDocumentContext.maxHtmlChunks) {
+      return AiDocumentContext.htmlChunks(document);
+    }
+
+    return AiDocumentChunks(
+      contexts: ranges
+          .map(
+            (range) => AiDocumentContext.forExcerpt(
+              document,
+              document.rawText.substring(range.start, range.end),
+            ),
+          )
+          .toList(growable: false),
+      sampled: false,
     );
   }
 }
